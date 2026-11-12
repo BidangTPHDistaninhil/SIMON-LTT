@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Besar LTT · Dinas Pertanian Inhil</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        /* ── palette: sawah & padi (rice-field / harvest) ── */
+        --forest-900: #12271a;
+        --forest-800: #17331f;
+        --forest-700: #1e4527;
+        --forest-600: #275c31;
+        --forest-500: #33753e;
+        --forest-100: #e7f0e5;
+
+        --gold-700: #92640a;
+        --gold-600: #b4830a;
+        --gold-500: #d4a017;
+        --gold-100: #faf0d6;
+
+        --rust-600: #b8481c;
+        --rust-100: #fbe6db;
+
+        --sky-600: #245a8f;
+        --sky-100: #e2edf7;
+
+        --teal-600: #0f6f63;
+        --teal-100: #e0f2ee;
+
+        --cream: #f7f4ec;
+        --paper: #fffdf8;
+        --ink-900: #1d2019;
+        --ink-700: #40453b;
+        --ink-500: #767a6d;
+        --line: #e7e1d0;
+
+        --radius-sm: 10px;
+        --radius: 16px;
+        --radius-lg: 22px;
+        --shadow-xs: 0 1px 2px rgba(24,30,20,0.05);
+        --shadow-sm: 0 3px 12px rgba(24,30,20,0.06);
+        --shadow-md: 0 10px 28px rgba(24,30,20,0.09);
+        --shadow-lg: 0 22px 50px rgba(24,30,20,0.14);
+
+        --font-display: 'Fraunces', serif;
+        --font-body: 'DM Sans', sans-serif;
+        --font-mono: 'DM Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+        font-family: var(--font-body);
+        color: var(--ink-900);
+        background-color: var(--cream);
+        min-height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ─── LATAR VIDEO SAWAH (bergerak, sudut pandang sejajar tanah — bukan udara) ─── */
+    .bg-scene {
+        position: fixed; inset: 0; z-index: -1; overflow: hidden;
+        background: var(--cream);
+    }
+    .bg-scene .bg-video {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        object-fit: cover; object-position: center 55%;
+    }
+    .bg-scene .bg-wash {
+        position: absolute; inset: 0;
+        background: linear-gradient(180deg, rgba(247,244,236,0.30) 0%, rgba(247,244,236,0.50) 45%, var(--cream) 90%);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .bg-scene .bg-video { display: none; }
+        .bg-scene { background: linear-gradient(180deg, #eef2df 0%, var(--cream) 70%); }
+        *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+    }
+
+    /* ─── LOADING OVERLAY ─── */
+    #loadingOverlay {
+        position: fixed; inset: 0; z-index: 5000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 16px; padding: 24px; text-align: center;
+        background:
+            radial-gradient(700px 400px at 50% 0%, rgba(212,160,23,0.18), transparent 60%),
+            linear-gradient(160deg, var(--forest-900) 0%, var(--forest-600) 100%);
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+    #loadingOverlay.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+    .loading-logo {
+        width: 60px; height: 60px; object-fit: contain; background: #fff;
+        border-radius: 16px; padding: 8px; box-shadow: 0 10px 30px -8px rgba(0,0,0,0.4);
+        animation: pulseBadge 1.8s ease-in-out infinite;
+    }
+    @keyframes pulseBadge { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+    .loading-spinner {
+        width: 34px; height: 34px; border-radius: 50%;
+        border: 3px solid rgba(255,255,255,0.22); border-top-color: var(--gold-500);
+        animation: spin 0.85s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-family: var(--font-display); color: #fff; font-size: 1.15rem; font-weight: 600; }
+    .loading-sub { color: rgba(255,255,255,0.82); font-size: 0.84rem; max-width: 320px; line-height: 1.55; }
+    .loading-sub.error { color: #ffd9a8; font-weight: 600; }
+    .loading-retry {
+        margin-top: 2px; padding: 9px 20px; border-radius: 20px;
+        background: var(--gold-500); color: var(--forest-900); font-weight: 700; font-size: 0.8rem;
+        cursor: pointer; border: none; transition: transform 0.15s, background 0.2s;
+        display: none;
+    }
+    .loading-retry:hover { background: #e6b125; transform: translateY(-1px); }
+    .loading-retry.show { display: inline-flex; }
+
+    /* ─── HEADER ─── */
+    header {
+        display: flex; align-items: center; gap: 14px; padding: 12px 5%;
+        background: rgba(255,253,248,0.9); backdrop-filter: blur(10px) saturate(140%);
+        border-bottom: 1px solid var(--line);
+        position: sticky; top: 0; z-index: 1000;
+    }
+    header img { width: 42px; height: auto; flex-shrink: 0; border-radius: 8px; }
+    .header-text h1 {
+        font-family: var(--font-display); font-size: 1.05rem; font-weight: 600;
+        color: var(--forest-800); line-height: 1.25; letter-spacing: -0.01em;
+    }
+    .header-text p { font-size: 0.74rem; color: var(--ink-500); margin-top: 1px; font-weight: 500; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    #jamUpdate { font-size: 0.7rem; color: var(--ink-500); font-weight: 500; display: none; }
+    @media (min-width: 640px) { #jamUpdate { display: inline; } }
+
+    .header-badge {
+        background: var(--forest-100); color: var(--forest-700);
+        font-size: 0.72rem; font-weight: 700; padding: 6px 13px; border-radius: 20px;
+        white-space: nowrap; display: flex; align-items: center; gap: 5px;
+    }
+
+    /* music toggle */
+    .music-btn {
+        width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+        background: var(--paper); cursor: pointer; font-size: 1rem;
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+        flex-shrink: 0;
+    }
+    .music-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+    .music-btn[aria-pressed="true"] { background: var(--gold-100); border-color: var(--gold-500); }
+
+    /* ─── CONTAINER ─── */
+    .container { padding: 26px 5% 56px; max-width: 1440px; margin: auto; position: relative; z-index: 1; }
+    footer { position: relative; z-index: 1; }
+
+    /* ─── HERO NOTE ─── */
+    .heroNote {
+        display: flex; align-items: flex-start; gap: 14px;
+        background: linear-gradient(135deg, var(--forest-800), var(--forest-600));
+        color: #f4f1e6; padding: 20px 22px; margin-bottom: 26px; border-radius: var(--radius-lg);
+        position: relative; box-shadow: var(--shadow-md); overflow: hidden;
+    }
+    .heroNote::after {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(420px 220px at 100% 0%, rgba(212,160,23,0.35), transparent 65%);
+        pointer-events: none;
+    }
+    .heroNote .heroIcon { font-size: 1.6rem; line-height: 1; flex-shrink: 0; }
+    .heroNote h2 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin-bottom: 4px; }
+    .heroNote p { font-size: 0.85rem; line-height: 1.6; color: rgba(244,241,230,0.88); }
+    .heroNote b { color: var(--gold-500); font-weight: 700; }
+    .closeNotif {
+        position: absolute; right: 14px; top: 14px; cursor: pointer;
+        width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.14);
+        display: flex; align-items: center; justify-content: center; font-size: 0.72rem; color: #fff;
+        transition: background 0.2s;
+    }
+    .closeNotif:hover { background: rgba(255,255,255,0.26); }
+
+    /* ─── SECTION ─── */
+    .module-section {
+        margin-bottom: 34px;
+        opacity: 0; transform: translateY(14px);
+        animation: riseIn 0.6s ease forwards;
+    }
+    .module-section:nth-of-type(2) { animation-delay: 0.05s; }
+    .module-section:nth-of-type(3) { animation-delay: 0.1s; }
+    .module-section:nth-of-type(4) { animation-delay: 0.15s; }
+    .module-section:nth-of-type(5) { animation-delay: 0.2s; }
+    @keyframes riseIn { to { opacity: 1; transform: translateY(0); } }
+
+    .module-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .module-title { display: flex; align-items: center; gap: 12px; }
+    .module-icon {
+        width: 40px; height: 40px; border-radius: 12px; display: flex;
+        align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+        box-shadow: var(--shadow-xs);
+    }
+    .module-title h2 {
+        font-family: var(--font-display); font-size: 1.15rem; font-weight: 600;
+        color: var(--ink-900); letter-spacing: -0.01em;
+    }
+    .module-title span.sub { display: block; font-size: 0.78rem; color: var(--ink-500); font-weight: 500; margin-top: 2px; }
+    .module-link {
+        font-size: 0.78rem; font-weight: 700; color: var(--forest-700);
+        text-decoration: none; background: var(--paper); border: 1px solid var(--line);
+        padding: 8px 15px; border-radius: 20px; box-shadow: var(--shadow-xs);
+        transition: all 0.2s; white-space: nowrap;
+    }
+    .module-link:hover { background: var(--forest-600); color: #fff; border-color: var(--forest-600); transform: translateY(-1px); }
+
+    .card-panel {
+        background: var(--paper); border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm); padding: 22px 24px; border: 1px solid var(--line);
+        transition: box-shadow 0.25s ease;
+    }
+    .card-panel:hover { box-shadow: var(--shadow-md); }
+    .panel-heading { font-size: 0.86rem; font-weight: 700; margin-bottom: 14px; color: var(--ink-700); }
+
+    /* ─── KPI GRID ─── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .kpi-box {
+        background: var(--paper); border-radius: var(--radius); padding: 16px 17px;
+        box-shadow: var(--shadow-sm); border: 1px solid var(--line);
+        border-top: 3px solid var(--forest-500);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .kpi-box:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .kpi-box .kpi-label { font-size: 0.7rem; color: var(--ink-500); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+    .kpi-box .kpi-value {
+        font-size: 1.5rem; font-weight: 500; color: var(--ink-900); margin-top: 6px;
+        font-family: var(--font-mono);
+    }
+    .kpi-box .kpi-value small { font-size: 0.82rem; font-weight: 600; color: var(--ink-500); }
+    .kpi-box.amber { border-top-color: var(--gold-500); }
+    .kpi-box.blue { border-top-color: var(--sky-600); }
+    .kpi-box.teal { border-top-color: var(--teal-600); }
+    .kpi-box.red { border-top-color: var(--rust-600); }
+
+    /* ─── TWO-COL LAYOUT ─── */
+    .two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    .chart-box { position: relative; height: 230px; }
+    .chart-box.short { height: 190px; }
+
+    /* ─── MINI RANK LIST ─── */
+    .mini-rank { display: flex; flex-direction: column; gap: 8px; }
+    .mini-rank-row {
+        display: flex; align-items: center; gap: 11px; padding: 9px 11px;
+        background: var(--cream); border-radius: 11px; font-size: 0.82rem;
+        transition: background 0.15s ease;
+    }
+    .mini-rank-row:hover { background: var(--forest-100); }
+    .mini-rank-row .rk-no {
+        width: 23px; height: 23px; border-radius: 50%; background: var(--forest-600); color: #fff;
+        display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+        font-family: var(--font-mono);
+    }
+    .mini-rank-row:nth-child(1) .rk-no { background: var(--gold-600); }
+    .mini-rank-row .rk-name { flex: 1; font-weight: 600; color: var(--ink-700); }
+    .mini-rank-row .rk-val { font-family: var(--font-mono); font-weight: 600; color: var(--forest-800); }
+
+    /* ─── PROGRESS BAR ROWS (capaian) ─── */
+    .prog-row { margin-bottom: 12px; }
+    .prog-row-top { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 5px; }
+    .prog-row-top .pname { font-weight: 600; color: var(--ink-700); }
+    .prog-row-top .pval { font-family: var(--font-mono); color: var(--ink-500); }
+    .prog-track { height: 8px; border-radius: 6px; background: var(--cream); overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 6px; transition: width 0.8s cubic-bezier(.22,1,.36,1); }
+
+    /* ─── BELUM INPUT CHIPS ─── */
+    .belum-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 13px; flex-wrap: wrap; gap: 8px; }
+    .belum-card-header h3 { font-size: 0.86rem; font-weight: 700; color: var(--ink-700); }
+    .belum-count-badge { font-size: 0.72rem; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
+    .belum-count-badge.danger { background: var(--rust-100); color: var(--rust-600); }
+    .belum-count-badge.success { background: var(--forest-100); color: var(--forest-700); }
+    .chip-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+    .belum-chip {
+        background: var(--rust-100); color: #8a3512; font-size: 0.76rem; font-weight: 600;
+        padding: 6px 12px; border-radius: 20px;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+        text-align: center; padding: 24px 20px 32px; font-size: 0.75rem; color: var(--ink-500);
+        border-top: 1px solid var(--line); margin-top: 10px;
+    }
+    footer strong { color: var(--forest-700); }
+
+    .empty-note { font-size: 0.78rem; color: var(--ink-500); padding: 10px 2px; }
+
+    @media (max-width: 480px) {
+        .header-text h1 { font-size: 0.92rem; }
+        .header-text p { font-size: 0.68rem; }
+        .module-title h2 { font-size: 1.02rem; }
+        .kpi-box .kpi-value { font-size: 1.28rem; }
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       JARVIS AI ASSISTANT — mengikuti palet halaman ini
+       (forest/gold/cream), namespace .jarvis-* agar tidak
+       bentrok dengan class dashboard yang sudah ada.
+       ══════════════════════════════════════════════════════════ */
+    .jarvis-fab{
+        position:fixed; right:24px; bottom:24px; width:60px; height:60px;
+        border-radius:50%; z-index:1200;
+        display:flex; align-items:center; justify-content:center;
+        background:radial-gradient(circle at 30% 30%, var(--forest-500), var(--forest-700) 75%);
+        border:none; cursor:pointer;
+        box-shadow: var(--shadow-md);
+        animation: jarvis-pulse 2.6s ease-in-out infinite;
+        transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .jarvis-fab:hover{ transform: translateY(-2px) scale(1.04); }
+    .jarvis-fab:active{ transform: scale(.96); }
+    .jarvis-fab svg{ width:26px; height:26px; stroke:#f4f1e6; fill:none; stroke-width:1.8; }
+    @keyframes jarvis-pulse{
+        0%,100%{ box-shadow: var(--shadow-md), 0 0 0 0 rgba(39,92,49,.35); }
+        50%{ box-shadow: var(--shadow-lg), 0 0 0 10px rgba(39,92,49,0); }
+    }
+    .jarvis-fab.jarvis-open svg.jarvis-icon-bot{ display:none; }
+    .jarvis-fab:not(.jarvis-open) svg.jarvis-icon-close{ display:none; }
+    .jarvis-fab::after{
+        content:""; position:absolute; top:2px; right:2px; width:12px; height:12px;
+        border-radius:50%; background:var(--gold-500); border:2px solid var(--forest-900);
+    }
+
+    .jarvis-panel{
+        position:fixed; right:24px; bottom:96px; width:360px; max-width:calc(100vw - 32px);
+        height:min(520px, calc(100vh - 140px));
+        display:flex; flex-direction:column;
+        background: var(--paper);
+        border:1px solid var(--line); border-radius: var(--radius-lg);
+        overflow:hidden; z-index:1199; box-shadow: var(--shadow-lg);
+        opacity:0; visibility:hidden; transform:translateY(16px) scale(.97);
+        transform-origin:bottom right; pointer-events:none;
+        transition:opacity .22s ease, transform .22s ease, visibility .22s;
+    }
+    .jarvis-panel.jarvis-open{
+        opacity:1; visibility:visible; transform:translateY(0) scale(1); pointer-events:auto;
+    }
+
+    .jarvis-header{
+        display:flex; align-items:center; gap:12px; padding:16px 18px;
+        border-bottom:1px solid var(--line);
+        background: linear-gradient(135deg, var(--forest-800), var(--forest-600));
+        flex-shrink:0;
+    }
+    .jarvis-header-avatar{
+        width:36px; height:36px; border-radius:50%; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center;
+        background:radial-gradient(circle at 30% 30%, var(--forest-500), var(--forest-700) 75%);
+    }
+    .jarvis-header-avatar svg{ width:18px; height:18px; stroke:#f4f1e6; fill:none; stroke-width:1.8; }
+    .jarvis-header-text{ display:flex; flex-direction:column; line-height:1.3; flex:1; }
+    .jarvis-header-text .jarvis-title{
+        font-family: var(--font-display); font-weight:600; font-size:1rem; color:#fff; letter-spacing:.2px;
+    }
+    .jarvis-header-text .jarvis-subtitle{ font-size:.7rem; color: var(--gold-500); font-weight:700; }
+    .jarvis-close{
+        background:transparent; border:none; color:rgba(244,241,230,.75); cursor:pointer;
+        padding:6px; border-radius:8px; display:flex;
+        transition:background .15s ease, color .15s ease;
+    }
+    .jarvis-close:hover{ background:rgba(255,255,255,.12); color:#fff; }
+    .jarvis-close svg{ width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2; }
+
+    .jarvis-messages{
+        flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px;
+        background: var(--cream);
+    }
+    .jarvis-messages::-webkit-scrollbar{ width:6px; }
+    .jarvis-messages::-webkit-scrollbar-thumb{ background: var(--line); border-radius:10px; }
+
+    .jarvis-msg{
+        max-width:85%; padding:10px 14px; border-radius:14px; font-size:.86rem; line-height:1.5;
+        word-wrap:break-word; animation: jarvis-msg-in .2s ease;
+    }
+    @keyframes jarvis-msg-in{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+
+    .jarvis-msg-bot{
+        align-self:flex-start; background: var(--paper); border:1px solid var(--line);
+        border-bottom-left-radius:4px; color: var(--ink-900);
+    }
+    .jarvis-msg-user{
+        align-self:flex-end; background: linear-gradient(135deg, var(--forest-500), var(--forest-700));
+        border-bottom-right-radius:4px; color:#f4f1e6; font-weight:500;
+    }
+
+    .jarvis-typing{
+        align-self:flex-start; display:flex; align-items:center; gap:8px;
+        padding:10px 14px; border-radius:14px; border-bottom-left-radius:4px;
+        background: var(--paper); border:1px solid var(--line);
+        font-size:.8rem; color: var(--ink-500);
+    }
+    .jarvis-typing-dots{ display:flex; gap:4px; }
+    .jarvis-typing-dots span{
+        width:5px; height:5px; border-radius:50%; background: var(--gold-500);
+        animation: jarvis-dot 1.1s infinite ease-in-out;
+    }
+    .jarvis-typing-dots span:nth-child(2){ animation-delay:.15s; }
+    .jarvis-typing-dots span:nth-child(3){ animation-delay:.3s; }
+    @keyframes jarvis-dot{
+        0%,60%,100%{ opacity:.3; transform:translateY(0); }
+        30%{ opacity:1; transform:translateY(-3px); }
+    }
+
+    .jarvis-input-row{
+        display:flex; align-items:flex-end; gap:8px; padding:12px;
+        border-top:1px solid var(--line); flex-shrink:0; background: var(--paper);
+    }
+    .jarvis-input{
+        flex:1; resize:none; max-height:90px;
+        background: var(--cream); border:1px solid var(--line); border-radius:12px;
+        padding:10px 12px; color: var(--ink-900); font-size:.86rem; font-family: var(--font-body);
+        outline:none; transition:border-color .15s ease;
+    }
+    .jarvis-input:focus{ border-color: var(--forest-500); }
+    .jarvis-input::placeholder{ color: var(--ink-500); }
+    .jarvis-send{
+        width:40px; height:40px; flex-shrink:0; border-radius:12px; border:none; cursor:pointer;
+        display:flex; align-items:center; justify-content:center;
+        background: linear-gradient(135deg, var(--forest-500), var(--forest-700));
+        transition:transform .15s ease, opacity .15s ease;
+    }
+    .jarvis-send:hover{ transform:scale(1.05); }
+    .jarvis-send:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+    .jarvis-send svg{ width:18px; height:18px; stroke:#f4f1e6; fill:none; stroke-width:2; }
+
+    .jarvis-mic{
+        width:40px; height:40px; flex-shrink:0; border-radius:12px;
+        border:1px solid var(--line); cursor:pointer;
+        display:flex; align-items:center; justify-content:center;
+        background: var(--cream);
+        transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .jarvis-mic:hover{ transform:scale(1.05); }
+    .jarvis-mic svg{ width:18px; height:18px; stroke: var(--forest-700); fill:none; stroke-width:2; }
+    .jarvis-mic.jarvis-listening{
+        background: var(--rust-100); border-color: var(--rust-600);
+        animation: jarvis-mic-pulse 1.3s ease-in-out infinite;
+    }
+    .jarvis-mic.jarvis-listening svg{ stroke: var(--rust-600); }
+    @keyframes jarvis-mic-pulse{
+        0%,100%{ box-shadow:0 0 0 0 rgba(184,72,28,.35); }
+        50%{ box-shadow:0 0 0 8px rgba(184,72,28,0); }
+    }
+    .jarvis-mic:disabled{ opacity:.4; cursor:not-allowed; }
+
+    @media (max-width:520px){
+        .jarvis-fab{ right:16px; bottom:16px; width:56px; height:56px; }
+        .jarvis-panel{
+            right:12px; left:12px; bottom:84px; width:auto; max-width:none;
+            height:min(70vh, 560px); border-radius:18px;
+        }
+    }
+    @media (prefers-reduced-motion: reduce){
+        .jarvis-fab{ animation:none; }
+        .jarvis-msg{ animation:none; }
+        .jarvis-typing-dots span{ animation:none; }
+    }
+</style>
+</head>
+<body>
+
+<!-- ─── LATAR VIDEO SAWAH (dekorasi, tidak menghalangi konten) ───
+     Video close-up sawah dari sudut sejajar tanah (bukan drone/udara), loop otomatis & bisu.
+     Ganti src di bawah kalau mau pakai video lain (mis. dari repo GitHub-mu sendiri). -->
+<div class="bg-scene" aria-hidden="true">
+    <video class="bg-video" autoplay muted loop playsinline preload="auto"
+           poster="https://images.pexels.com/videos/6701387/agriculture-act-agriculture-act-2020-in-telugu-agriculture-agriculture-agriculture-bill-2020-6701387.jpeg?auto=compress&cs=tinysrgb&h=800&fit=crop&w=1400">
+        <source src="https://videos.pexels.com/video-files/6701387/6701387-hd_1920_1080_30fps.mp4" type="video/mp4">
+    </video>
+    <div class="bg-wash"></div>
+</div>
+
+
+<!-- ─── MUSIK LATAR ───
+     Ganti nama file di baris <source> di bawah untuk mengganti lagu.
+     Contoh: file lagu ada di repo GitHub → pakai raw.githubusercontent.com,
+     atau taruh file mp3 di folder yang sama dengan halaman ini lalu tulis
+     nama filenya saja (mis. "sentimental.mp3"). -->
+<audio id="bgMusic" loop preload="none">
+    <source src="Sentimental.mp3" type="audio/mpeg">
+</audio>
+
+<!-- ─── LOADING OVERLAY ─── -->
+<div id="loadingOverlay">
+    <img class="loading-logo" src="https://www.inhilkab.go.id/assets/portal/img/logos/logo-inhil-big.png" alt="Logo">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Mengambil data dari server…</div>
+    <div class="loading-sub" id="loadingSub">Menggabungkan data harian, capaian, bulanan, dan panen.</div>
+    <button class="loading-retry" id="loadingRetry" onclick="loadAll()">Coba Lagi</button>
+</div>
+
+<!-- ─── HEADER ─── -->
+<header>
+    <img src="https://www.inhilkab.go.id/assets/portal/img/logos/logo-inhil-big.png" alt="Logo Inhil">
+    <div class="header-text">
+        <h1>Dashboard Besar LTT</h1>
+        <p>Dinas Pertanian Kabupaten Indragiri Hilir</p>
+    </div>
+    <div class="header-right">
+        <span id="jamUpdate"></span>
+        <div class="header-badge"><span>🌾</span> Ringkasan Terpadu</div>
+        <button class="music-btn" id="musicBtn" aria-pressed="false" title="Putar musik">🔈</button>
+    </div>
+</header>
+
+<div class="container">
+
+    <!-- ─── NOTIF ─── -->
+    <div id="notifInfo" class="heroNote">
+        <span class="closeNotif" onclick="document.getElementById('notifInfo').style.display='none'">✕</span>
+        <div class="heroIcon">🌱</div>
+        <div>
+            <h2>Semua data dalam satu layar</h2>
+            <p>Halaman ini menggabungkan otomatis data dari sumber yang sama dengan <b>Dashboard Utama</b>, <b>Progres Capaian</b>, <b>Laporan Bulanan</b>, dan <b>Analisis Panen</b> — tanpa perlu buka satu-satu. Klik <b>"Detail →"</b> di tiap bagian untuk rincian lengkap dan filter lanjutan.</p>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODULE 1: HARIAN ═══════════════ -->
+    <div class="module-section">
+        <div class="module-head">
+            <div class="module-title">
+                <div class="module-icon" style="background:var(--forest-100);">📅</div>
+                <div>
+                    <h2>Ringkasan Harian</h2>
+                    <span class="sub">Total LTT keseluruhan &amp; LTT hari ini</span>
+                </div>
+            </div>
+            <a class="module-link" href="laporanharian.html" target="_blank">Detail Harian →</a>
+        </div>
+
+        <div class="kpi-grid" id="kpiHarian">
+            <div class="kpi-box"><div class="kpi-label">Total LTT Keseluruhan</div><div class="kpi-value" id="h_total">—</div></div>
+            <div class="kpi-box amber"><div class="kpi-label">LTT Hari Ini</div><div class="kpi-value" id="h_today">—</div></div>
+            <div class="kpi-box blue"><div class="kpi-label">Total Oplah</div><div class="kpi-value" id="h_oplah">—</div></div>
+            <div class="kpi-box teal"><div class="kpi-label">Total Reguler</div><div class="kpi-value" id="h_reguler">—</div></div>
+        </div>
+
+        <div class="two-col">
+            <div class="card-panel">
+                <h3 class="panel-heading">Top 5 Kecamatan (LTT Keseluruhan)</h3>
+                <div class="mini-rank" id="rankKecamatan"></div>
+            </div>
+            <div class="card-panel">
+                <h3 class="panel-heading">Top 5 Kecamatan (LTT Jagung)</h3>
+                <div class="mini-rank" id="rankJagung"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODULE 2: CAPAIAN ═══════════════ -->
+    <div class="module-section">
+        <div class="module-head">
+            <div class="module-title">
+                <div class="module-icon" style="background:var(--gold-100);">🎯</div>
+                <div>
+                    <h2>Progres Capaian LTT</h2>
+                    <span class="sub" id="capaianPeriodeLabel">Target vs Realisasi bulan berjalan</span>
+                </div>
+            </div>
+            <a class="module-link" href="capaiantargetltt.html" target="_blank">Detail Capaian →</a>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-box amber"><div class="kpi-label">Target</div><div class="kpi-value" id="c_target">—</div></div>
+            <div class="kpi-box"><div class="kpi-label">Realisasi</div><div class="kpi-value" id="c_realisasi">—</div></div>
+            <div class="kpi-box blue"><div class="kpi-label">Capaian</div><div class="kpi-value" id="c_persen">—</div></div>
+            <div class="kpi-box teal"><div class="kpi-label">Kecamatan Tercatat</div><div class="kpi-value" id="c_jumlahkec">—</div></div>
+        </div>
+
+        <div class="card-panel">
+            <h3 class="panel-heading">Top 5 Capaian per Kecamatan</h3>
+            <div id="capaianRows"></div>
+            <div class="empty-note" id="capaianEmpty" style="display:none;">Belum ada data target/realisasi untuk periode ini.</div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODULE 3: BULANAN ═══════════════ -->
+    <div class="module-section">
+        <div class="module-head">
+            <div class="module-title">
+                <div class="module-icon" style="background:var(--sky-100);">📆</div>
+                <div>
+                    <h2>Laporan LTT Bulan Ini</h2>
+                    <span class="sub" id="bulananPeriodeLabel">Rekap tanam, olah lahan &amp; panen</span>
+                </div>
+            </div>
+            <a class="module-link" href="Laporanbulananltt.html" target="_blank">Detail Bulanan →</a>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-box"><div class="kpi-label">Total LTT Bulan Ini</div><div class="kpi-value" id="b_ltt">—</div></div>
+            <div class="kpi-box blue"><div class="kpi-label">Total Olah Lahan</div><div class="kpi-value" id="b_olah">—</div></div>
+            <div class="kpi-box teal"><div class="kpi-label">Total Panen</div><div class="kpi-value" id="b_panen">—</div></div>
+            <div class="kpi-box amber"><div class="kpi-label">Kecamatan Aktif</div><div class="kpi-value" id="b_kec">—</div></div>
+        </div>
+
+        <div class="card-panel">
+            <h3 class="panel-heading">Tren LTT per Minggu (Bulan Ini)</h3>
+            <div class="chart-box short"><canvas id="chartMingguan"></canvas></div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MODULE 4: ANALISIS PANEN ═══════════════ -->
+    <div class="module-section">
+        <div class="module-head">
+            <div class="module-title">
+                <div class="module-icon" style="background:var(--teal-100);">🌾</div>
+                <div>
+                    <h2>Analisis Tanam &amp; Panen</h2>
+                    <span class="sub">Rasio realisasi panen terhadap LTT</span>
+                </div>
+            </div>
+            <a class="module-link" href="analisispanen.html" target="_blank">Detail Analisis →</a>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-box"><div class="kpi-label">Total Tanam</div><div class="kpi-value" id="a_tanam">—</div></div>
+            <div class="kpi-box teal"><div class="kpi-label">Total Panen</div><div class="kpi-value" id="a_panen">—</div></div>
+            <div class="kpi-box amber"><div class="kpi-label">Selisih (Belum Panen)</div><div class="kpi-value" id="a_selisih">—</div></div>
+            <div class="kpi-box blue"><div class="kpi-label">Rasio Panen</div><div class="kpi-value" id="a_rasio">—</div></div>
+        </div>
+
+        <div class="card-panel">
+            <h3 class="panel-heading">Tanam vs Panen — Top 6 Kecamatan</h3>
+            <div class="chart-box"><canvas id="chartTanamPanen"></canvas></div>
+        </div>
+    </div>
+
+</div>
+
+<footer>
+    <div><strong>Dinas Pertanian Kabupaten Indragiri Hilir</strong> · Dashboard Besar — Ringkasan Terpadu LTT</div>
+    <div id="lastUpdateFooter">—</div>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// KONFIGURASI — 2 EXEC (sumber data)
+// ═══════════════════════════════════════════════════════════
+const API_MAIN    = "https://script.google.com/macros/s/AKfycbz9BbxHtegnOrlIdwMBjsRRfK1weywnjIXnbX4YgGY-F6egmvMFUO3pqZ5CAXg99ac/exec"; // dipakai: harian, bulanan, analisis panen
+const API_CAPAIAN = "https://script.google.com/macros/s/AKfycbxeBdznULEYyYf0DiokNjYaoG-VJURjT2QhKyiXat65TSSzpv1Dqu69gYgAXpluKsE/exec"; // dipakai: capaian (realisasi + ?type=target)
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // cache 5 menit di sessionStorage supaya tidak fetch berulang
+
+const SEMUA_KECAMATAN = [
+    "Batang Tuaka","Concong","Enok","Gaung","Gaung Anak Serka",
+    "Kateman","Kemuning","Kempas","Keritang","Kuala Indragiri",
+    "Mandah","Pelangiran","Pulau Burung","Reteh","Sungai Batang",
+    "Tanah Merah","Teluk Belengkong","Tembilahan","Tembilahan Hulu","Tempuling"
+];
+
+let rawMain = [];       // dataset mentah LTT (harian/bulanan/analisis)
+let realisasiCap = [];  // dataset realisasi dari API capaian
+let targetCap = [];     // dataset target dari API capaian
+
+// ═══════════════════════════════════════════════════════════
+// UTILITAS UMUM
+// ═══════════════════════════════════════════════════════════
+function safeNumber(val){
+    if(val === null || val === undefined) return 0;
+    if(typeof val === "number") return val;
+    let str = String(val).trim();
+    if(str.includes(",")) str = str.replace(/\./g,"").replace(",", ".");
+    return Number(str) || 0;
+}
+function fmt(n){ return (n||0).toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function todayStr(){
+    const d = new Date();
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function formatDate(date){
+    if(!date) return "";
+    const d = new Date(date);
+    if(isNaN(d)) return String(date).slice(0,10);
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function getMonthKey(tgl){
+    if(!tgl) return "";
+    if(String(tgl).includes("-")) return String(tgl).slice(0,7);
+    const d = new Date(tgl);
+    if(isNaN(d)) return "";
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+}
+function namaBulanToNumber(nama){
+    const map = {"JANUARI":"01","FEBRUARI":"02","MARET":"03","APRIL":"04","MEI":"05","JUNI":"06",
+        "JULI":"07","AGUSTUS":"08","SEPTEMBER":"09","OKTOBER":"10","NOVEMBER":"11","DESEMBER":"12"};
+    return map[(nama||"").toUpperCase()] || "";
+}
+function weekOfMonth(tglStr){
+    const day = parseInt((tglStr||'').toString().slice(8,10), 10);
+    if(!day || isNaN(day)) return null;
+    if(day <= 7) return 1;
+    if(day <= 14) return 2;
+    if(day <= 21) return 3;
+    return 4;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CACHE SEDERHANA (sessionStorage) — supaya pindah/reload halaman
+// tidak selalu menarik ulang dari Google Apps Script
+// ═══════════════════════════════════════════════════════════
+async function fetchCached(url, cacheKey){
+    try{
+        const cached = sessionStorage.getItem(cacheKey);
+        if(cached){
+            const parsed = JSON.parse(cached);
+            if(Date.now() - parsed.ts < CACHE_TTL_MS) return parsed.data;
+        }
+    }catch(e){ /* abaikan cache korup */ }
+
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("Gagal mengambil data (" + res.status + ")");
+    const data = await res.json();
+    try{ sessionStorage.setItem(cacheKey, JSON.stringify({ts: Date.now(), data})); }catch(e){ /* storage penuh, lanjut tanpa cache */ }
+    return data;
+}
+
+// ═══════════════════════════════════════════════════════════
+// LOAD SEMUA DATA (2 exec, paralel)
+// ═══════════════════════════════════════════════════════════
+async function loadAll(){
+    showLoading(true);
+    try{
+        const [main, real, target] = await Promise.all([
+            fetchCached(API_MAIN, "cache_ltt_main"),
+            fetchCached(API_CAPAIAN, "cache_capaian_real"),
+            fetchCached(API_CAPAIAN + "?type=target", "cache_capaian_target")
+        ]);
+
+        rawMain = Array.isArray(main) ? main : (main.data || []);
+        rawMain.forEach(d => { d.TANGGAL = formatDate(d.TANGGAL); });
+
+        realisasiCap = Array.isArray(real) ? real : [];
+        targetCap = Array.isArray(target) ? target : [];
+
+        renderHarian();
+        renderCapaian();
+        renderBulanan();
+        renderAnalisis();
+
+        document.getElementById("jamUpdate").textContent = "Update: " + new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+        document.getElementById("lastUpdateFooter").textContent = "Data diperbarui: " + new Date().toLocaleString('id-ID');
+
+        showLoading(false);
+    }catch(err){
+        console.error(err);
+        showLoadingError(err.message || "Terjadi kesalahan saat memuat data");
+    }
+}
+
+function showLoading(show){
+    const overlay = document.getElementById("loadingOverlay");
+    if(show){ overlay.classList.remove("hide"); }
+    else{ overlay.classList.add("hide"); }
+}
+function showLoadingError(msg){
+    document.querySelector(".loading-spinner").style.display = "none";
+    document.getElementById("loadingText").textContent = "⚠️ Gagal memuat data";
+    const sub = document.getElementById("loadingSub");
+    sub.textContent = "Periksa koneksi internet lalu coba lagi. (" + msg + ")";
+    sub.classList.add("error");
+    document.getElementById("loadingRetry").classList.add("show");
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 1: HARIAN
+// ═══════════════════════════════════════════════════════════
+function renderHarian(){
+    let totalKeseluruhan = 0, totalOplah = 0, totalReguler = 0, totalToday = 0;
+    const today = todayStr();
+    const kecTotal = {};
+    const kecJagungTotal = {};
+
+    rawMain.forEach(d => {
+        const jenis = (d["JENIS LTT"] || "").toUpperCase();
+        const luas = safeNumber(d["LUAS TAMBAH TANAM"]);
+        const kec = d.KECAMATAN || "(Tanpa Kecamatan)";
+
+        totalKeseluruhan += luas;
+        if(jenis.includes("OPLAH")) totalOplah += luas;
+        if(jenis.includes("REGULER")) totalReguler += luas;
+        if(jenis.includes("JAGUNG")) kecJagungTotal[kec] = (kecJagungTotal[kec] || 0) + luas;
+        if(d.TANGGAL === today){ totalToday += luas; }
+
+        kecTotal[kec] = (kecTotal[kec] || 0) + luas;
+    });
+
+    document.getElementById("h_total").innerHTML = fmt(totalKeseluruhan) + " <small>Ha</small>";
+    document.getElementById("h_today").innerHTML = fmt(totalToday) + " <small>Ha</small>";
+    document.getElementById("h_oplah").innerHTML = fmt(totalOplah) + " <small>Ha</small>";
+    document.getElementById("h_reguler").innerHTML = fmt(totalReguler) + " <small>Ha</small>";
+
+    // top 5 kecamatan
+    const top5 = Object.entries(kecTotal).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const rankEl = document.getElementById("rankKecamatan");
+    rankEl.innerHTML = top5.length ? top5.map((r,i)=>`
+        <div class="mini-rank-row">
+            <div class="rk-no">${i+1}</div>
+            <div class="rk-name">${r[0]}</div>
+            <div class="rk-val">${fmt(r[1])} Ha</div>
+        </div>`).join("") : `<div class="empty-note">Belum ada data.</div>`;
+
+    // top 5 kecamatan LTT Jagung
+    const top5Jagung = Object.entries(kecJagungTotal).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const rankJagungEl = document.getElementById("rankJagung");
+    rankJagungEl.innerHTML = top5Jagung.length ? top5Jagung.map((r,i)=>`
+        <div class="mini-rank-row">
+            <div class="rk-no">${i+1}</div>
+            <div class="rk-name">${r[0]}</div>
+            <div class="rk-val">${fmt(r[1])} Ha</div>
+        </div>`).join("") : `<div class="empty-note">Belum ada data Jagung.</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 2: CAPAIAN (bulan berjalan, dari API_CAPAIAN)
+// ═══════════════════════════════════════════════════════════
+function renderCapaian(){
+    // tentukan bulan aktif = bulan terbaru yang punya data realisasi
+    const bulanList = realisasiCap.map(d => getMonthKey(d.TANGGAL)).filter(Boolean).sort();
+    const selectedMonth = bulanList.length ? bulanList[bulanList.length - 1] : getMonthKey(todayStr());
+
+    const bulanNames = {'01':'Januari','02':'Februari','03':'Maret','04':'April','05':'Mei','06':'Juni',
+        '07':'Juli','08':'Agustus','09':'September','10':'Oktober','11':'November','12':'Desember'};
+    const [ty, tm] = selectedMonth.split("-");
+    document.getElementById("capaianPeriodeLabel").textContent = `Target vs Realisasi — ${bulanNames[tm] || ''} ${ty || ''}`;
+
+    const realMap = {}, targetMap = {};
+    realisasiCap.filter(d => getMonthKey(d.TANGGAL) === selectedMonth).forEach(d => {
+        const k = (d.KECAMATAN || "").toUpperCase();
+        realMap[k] = (realMap[k] || 0) + safeNumber(d["LUAS TAMBAH TANAM"]);
+    });
+    targetCap.forEach(d => {
+        const bulan = namaBulanToNumber(d.BULAN);
+        const gabung = d.TAHUN + "-" + bulan;
+        if(gabung === selectedMonth){
+            const k = (d.KECAMATAN || "").toUpperCase();
+            targetMap[k] = (targetMap[k] || 0) + safeNumber(d.TARGET);
+        }
+    });
+
+    const totalT = Object.values(targetMap).reduce((a,b)=>a+b,0);
+    const totalR = Object.values(realMap).reduce((a,b)=>a+b,0);
+    const persen = totalT ? (totalR/totalT*100) : 0;
+    const keySet = new Set([...Object.keys(targetMap), ...Object.keys(realMap)]);
+
+    document.getElementById("c_target").innerHTML = fmt(totalT) + " <small>Ha</small>";
+    document.getElementById("c_realisasi").innerHTML = fmt(totalR) + " <small>Ha</small>";
+    document.getElementById("c_persen").innerHTML = persen.toFixed(1) + "<small>%</small>";
+    document.getElementById("c_jumlahkec").innerHTML = keySet.size + " <small>Kec</small>";
+
+    const rows = [...keySet].map(k => {
+        const r = realMap[k] || 0, t = targetMap[k] || 0;
+        return { k, r, t, p: t ? (r/t*100) : 0 };
+    }).sort((a,b) => b.p - a.p).slice(0,5);
+
+    const wrap = document.getElementById("capaianRows");
+    const emptyNote = document.getElementById("capaianEmpty");
+    if(!rows.length){
+        wrap.innerHTML = "";
+        emptyNote.style.display = "block";
+        return;
+    }
+    emptyNote.style.display = "none";
+    wrap.innerHTML = rows.map(r => {
+        const pct = Math.min(r.p, 100);
+        const color = r.p <= 30 ? "#c1440e" : r.p <= 50 ? "#d4a017" : r.p <= 70 ? "#c9a227" : r.p <= 90 ? "#5a9b52" : "#1e4527";
+        return `<div class="prog-row">
+            <div class="prog-row-top"><span class="pname">${r.k}</span><span class="pval">${fmt(r.r)} / ${fmt(r.t)} Ha (${r.p.toFixed(1)}%)</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${color};"></div></div>
+        </div>`;
+    }).join("");
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 3: BULANAN (bulan berjalan, dari API_MAIN)
+// ═══════════════════════════════════════════════════════════
+let chartMingguanInst = null;
+function renderBulanan(){
+    const bulanNames = {'01':'Januari','02':'Februari','03':'Maret','04':'April','05':'Mei','06':'Juni',
+        '07':'Juli','08':'Agustus','09':'September','10':'Oktober','11':'November','12':'Desember'};
+    const curMonth = getMonthKey(todayStr());
+    const [cy, cm] = curMonth.split("-");
+    document.getElementById("bulananPeriodeLabel").textContent = `Rekap tanam, olah lahan & panen — ${bulanNames[cm]} ${cy}`;
+
+    const dataBulan = rawMain.filter(d => getMonthKey(d.TANGGAL) === curMonth);
+
+    let totalLTT = 0, totalOlah = 0, totalPanen = 0;
+    const kecSet = new Set();
+    const mingguMap = {1:0, 2:0, 3:0, 4:0};
+
+    dataBulan.forEach(d => {
+        const luas = safeNumber(d["LUAS TAMBAH TANAM"]);
+        totalLTT += luas;
+        if(d["LUAS OLAH LAHAN"] !== undefined) totalOlah += safeNumber(d["LUAS OLAH LAHAN"]);
+        if(d["LUAS PANEN"] !== undefined) totalPanen += safeNumber(d["LUAS PANEN"]);
+        if(d.KECAMATAN) kecSet.add(d.KECAMATAN);
+        const w = weekOfMonth(d.TANGGAL);
+        if(w) mingguMap[w] += luas;
+    });
+
+    document.getElementById("b_ltt").innerHTML = fmt(totalLTT) + " <small>Ha</small>";
+    document.getElementById("b_olah").innerHTML = fmt(totalOlah) + " <small>Ha</small>";
+    document.getElementById("b_panen").innerHTML = fmt(totalPanen) + " <small>Ha</small>";
+    document.getElementById("b_kec").innerHTML = kecSet.size + " <small>Kec</small>";
+
+    const ctx = document.getElementById("chartMingguan").getContext("2d");
+    if(chartMingguanInst) chartMingguanInst.destroy();
+    chartMingguanInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Minggu 1','Minggu 2','Minggu 3','Minggu 4'],
+            datasets: [{
+                label: 'LTT (Ha)',
+                data: [mingguMap[1], mingguMap[2], mingguMap[3], mingguMap[4]],
+                backgroundColor: '#33753e',
+                borderRadius: 8,
+                maxBarThickness: 48
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: { color: '#eee8d5' } }, x: { grid: { display: false } } }
+        }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODULE 4: ANALISIS TANAM & PANEN (dari API_MAIN, seluruh data)
+// ═══════════════════════════════════════════════════════════
+let chartTanamPanenInst = null;
+function renderAnalisis(){
+    let totalTanam = 0, totalPanen = 0;
+    const kecMap = {};
+
+    rawMain.forEach(d => {
+        const tanam = safeNumber(d["LUAS TAMBAH TANAM"]);
+        const panen = safeNumber(d["LUAS PANEN"]);
+        totalTanam += tanam;
+        totalPanen += panen;
+
+        const kec = d.KECAMATAN || "(Tanpa Kecamatan)";
+        if(!kecMap[kec]) kecMap[kec] = { tanam: 0, panen: 0 };
+        kecMap[kec].tanam += tanam;
+        kecMap[kec].panen += panen;
+    });
+
+    const rasio = totalTanam ? (totalPanen/totalTanam*100) : 0;
+    const selisih = totalTanam - totalPanen;
+
+    document.getElementById("a_tanam").innerHTML = fmt(totalTanam) + " <small>Ha</small>";
+    document.getElementById("a_panen").innerHTML = fmt(totalPanen) + " <small>Ha</small>";
+    document.getElementById("a_selisih").innerHTML = fmt(selisih) + " <small>Ha</small>";
+    document.getElementById("a_rasio").innerHTML = rasio.toFixed(1) + "<small>%</small>";
+
+    const top6 = Object.entries(kecMap).sort((a,b)=>b[1].tanam - a[1].tanam).slice(0,6);
+    const ctx = document.getElementById("chartTanamPanen").getContext("2d");
+    if(chartTanamPanenInst) chartTanamPanenInst.destroy();
+    chartTanamPanenInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: top6.map(r => r[0]),
+            datasets: [
+                { label: 'Tanam', data: top6.map(r => r[1].tanam), backgroundColor: '#275c31', borderRadius: 6, maxBarThickness: 26 },
+                { label: 'Panen', data: top6.map(r => r[1].panen), backgroundColor: '#0f6f63', borderRadius: 6, maxBarThickness: 26 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle' } } },
+            scales: { y: { beginAtZero: true, grid: { color: '#eee8d5' } }, x: { grid: { display: false } } }
+        }
+    });
+}
+
+// ═══════════════════════════════════════════
+// MUSIK LATAR (autoplay + fallback interaksi pertama)
+// ═══════════════════════════════════════════
+const bgMusic = document.getElementById("bgMusic");
+const musicBtn = document.getElementById("musicBtn");
+let audioFileMissing = false;
+function setPlayingUI(isPlaying) {
+    if (audioFileMissing) return;
+    musicBtn.textContent = isPlaying ? "🔊" : "🔈";
+    musicBtn.setAttribute("aria-pressed", isPlaying ? "true" : "false");
+    musicBtn.title = isPlaying ? "Jeda musik" : "Putar musik";
+}
+function toggleMusic() {
+    if (audioFileMissing) {
+        alert("File musik (sentimental.mp3) tidak ditemukan di server. Pastikan file sudah diupload di folder yang sama dengan halaman ini, atau perbarui alamat src pada tag <audio>.");
+        return;
+    }
+    if (bgMusic.paused) {
+        bgMusic.play().then(() => setPlayingUI(true)).catch(() => setPlayingUI(false));
+    } else {
+        bgMusic.pause();
+        setPlayingUI(false);
+    }
+}
+musicBtn.addEventListener("click", toggleMusic);
+bgMusic.addEventListener("play", () => setPlayingUI(true));
+bgMusic.addEventListener("pause", () => setPlayingUI(false));
+// Deteksi kalau file audio gagal dimuat (404 / rusak / nama salah)
+bgMusic.addEventListener("error", () => {
+    audioFileMissing = true;
+    musicBtn.textContent = "⚠️";
+    musicBtn.title = "File musik tidak ditemukan (cek alamat src pada tag <audio>)";
+    console.error("Gagal memuat audio: periksa apakah file lagu benar-benar ada di alamat yang ditulis pada tag <audio> (src) di HTML ini.");
+});
+// Coba putar otomatis saat halaman dibuka — browser umumnya memblokir ini
+// sampai ada interaksi pengguna, jadi dipasang juga fallback: musik akan
+// otomatis mulai pada interaksi pertama (klik ATAU sentuhan) di halaman
+// kalau autoplay gagal. Dua event dipasang karena beberapa browser mobile
+// (Safari/iOS terutama) hanya mengizinkan play() dari event 'touchstart'.
+window.addEventListener("load", () => {
+    const p = bgMusic.play();
+    if (p !== undefined) {
+        p.then(() => setPlayingUI(true)).catch(() => setPlayingUI(false));
+    }
+});
+function tryAutoplayOnFirstInteraction() {
+    if (!bgMusic.paused || audioFileMissing) return;
+    bgMusic.play().then(() => setPlayingUI(true)).catch(() => {});
+}
+window.addEventListener("click", tryAutoplayOnFirstInteraction, { once: true });
+window.addEventListener("touchstart", tryAutoplayOnFirstInteraction, { once: true });
+
+// ═══════════════════════════════════════════════════════════
+// START
+// ═══════════════════════════════════════════════════════════
+loadAll();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     JARVIS AI ASSISTANT (script terpisah, namespace JarvisApp,
+     tidak menyentuh fungsi/variabel dashboard di atas)
+     ══════════════════════════════════════════════════════════ -->
+<script>
+const JarvisApp = (function () {
+
+    const CONFIG = {
+        greeting: "Selamat datang. Saya JARVIS, asisten digital Portal TPH. Ada yang bisa saya bantu?",
+        thinkingLabel: "JARVIS sedang berpikir...",
+        placeholder: "Tulis pertanyaan Anda...",
+    };
+
+    let elements = {};
+    let isOpen = false;
+    let isThinking = false;
+
+    const ICONS = {
+        bot: `<svg class="jarvis-icon-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="14" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.3" fill="currentColor" stroke="none"/><path d="M9 18h6"/></svg>`,
+        close: `<svg class="jarvis-icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+        closeSmall: `<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+        send: `<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 8 6 8-16-8z"/></svg>`,
+        mic: `<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M9 21h6"/></svg>`,
+    };
+
+    function buildMarkup() {
+        const wrapper = document.createElement("div");
+        wrapper.id = "jarvisRoot";
+        wrapper.innerHTML = `
+            <button class="jarvis-fab" id="jarvisFab" type="button" aria-label="Buka JARVIS Assistant">
+                ${ICONS.bot}
+                ${ICONS.close}
+            </button>
+
+            <div class="jarvis-panel" id="jarvisPanel" role="dialog" aria-label="JARVIS Assistant">
+                <div class="jarvis-header">
+                    <div class="jarvis-header-avatar">${ICONS.bot.replace('jarvis-icon-bot','')}</div>
+                    <div class="jarvis-header-text">
+                        <span class="jarvis-title">JARVIS</span>
+                        <span class="jarvis-subtitle">AI ASSISTANT • PORTAL TPH</span>
+                    </div>
+                    <button class="jarvis-close" id="jarvisCloseBtn" type="button" aria-label="Tutup panel">
+                        ${ICONS.closeSmall}
+                    </button>
+                </div>
+
+                <div class="jarvis-messages" id="jarvisMessages"></div>
+
+                <div class="jarvis-input-row">
+                    <textarea
+                        class="jarvis-input"
+                        id="jarvisInput"
+                        rows="1"
+                        placeholder="${CONFIG.placeholder}"
+                    ></textarea>
+                    <button class="jarvis-mic" id="jarvisMicBtn" type="button" aria-label="Bicara ke JARVIS">
+                        ${ICONS.mic}
+                    </button>
+                    <button class="jarvis-send" id="jarvisSendBtn" type="button" aria-label="Kirim pesan">
+                        ${ICONS.send}
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(wrapper);
+
+        elements = {
+            fab: document.getElementById("jarvisFab"),
+            panel: document.getElementById("jarvisPanel"),
+            closeBtn: document.getElementById("jarvisCloseBtn"),
+            messages: document.getElementById("jarvisMessages"),
+            input: document.getElementById("jarvisInput"),
+            sendBtn: document.getElementById("jarvisSendBtn"),
+            micBtn: document.getElementById("jarvisMicBtn"),
+        };
+    }
+
+    function openPanel() {
+        isOpen = true;
+        elements.panel.classList.add("jarvis-open");
+        elements.fab.classList.add("jarvis-open");
+        elements.input.focus();
+    }
+
+    function closePanel() {
+        isOpen = false;
+        elements.panel.classList.remove("jarvis-open");
+        elements.fab.classList.remove("jarvis-open");
+    }
+
+    function togglePanel() {
+        isOpen ? closePanel() : openPanel();
+    }
+
+    function appendMessage(text, sender) {
+        const bubble = document.createElement("div");
+        bubble.className = "jarvis-msg " + (sender === "user" ? "jarvis-msg-user" : "jarvis-msg-bot");
+        bubble.textContent = text;
+        elements.messages.appendChild(bubble);
+        scrollToBottom();
+    }
+
+    function showTyping() {
+        const typing = document.createElement("div");
+        typing.className = "jarvis-typing";
+        typing.id = "jarvisTypingIndicator";
+        typing.innerHTML = `
+            <span>${CONFIG.thinkingLabel}</span>
+            <span class="jarvis-typing-dots"><span></span><span></span><span></span></span>
+        `;
+        elements.messages.appendChild(typing);
+        scrollToBottom();
+    }
+
+    function hideTyping() {
+        const typing = document.getElementById("jarvisTypingIndicator");
+        if (typing) typing.remove();
+    }
+
+    function scrollToBottom() {
+        elements.messages.scrollTop = elements.messages.scrollHeight;
+    }
+
+    // ---------------------------------------------------------------------
+    // Integrasi AI/API — TITIK INTEGRASI BACKEND
+    // Saat ini mengembalikan respons dummy. Ganti isi fungsi ini dengan
+    // pemanggilan ke backend/API AI Anda. JANGAN taruh API key/secret di sini.
+    // ---------------------------------------------------------------------
+    async function sendToJarvis(message) {
+        // ==== TEMPAT INTEGRASI BACKEND/API AI ====
+        // const res = await fetch("https://your-backend.example.com/jarvis", {
+        //     method: "POST",
+        //     headers: { "Content-Type": "application/json" },
+        //     body: JSON.stringify({ message })
+        // });
+        // const data = await res.json();
+        // return data.reply;
+
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        return "Baik, saya menerima perintah Anda. Modul AI sedang dipersiapkan.";
+    }
+
+    async function handleSend() {
+        const text = elements.input.value.trim();
+        if (!text || isThinking) return;
+
+        appendMessage(text, "user");
+        elements.input.value = "";
+        autoResizeInput();
+
+        isThinking = true;
+        elements.sendBtn.disabled = true;
+        showTyping();
+
+        try {
+            const reply = await sendToJarvis(text);
+            hideTyping();
+            appendMessage(reply, "bot");
+        } catch (err) {
+            hideTyping();
+            appendMessage("Maaf, terjadi kendala saat memproses permintaan Anda. Silakan coba lagi.", "bot");
+        } finally {
+            isThinking = false;
+            elements.sendBtn.disabled = false;
+        }
+    }
+
+    function autoResizeInput() {
+        elements.input.style.height = "auto";
+        elements.input.style.height = Math.min(elements.input.scrollHeight, 90) + "px";
+    }
+
+    // ---------------------------------------------------------------------
+    // Input suara (mic) — Web Speech API bawaan browser, gratis, tanpa
+    // backend. Hanya mengisi kotak teks; pengiriman tetap lewat handleSend().
+    // Didukung di Chrome/Edge desktop & Android. Tidak didukung Firefox
+    // dan Safari desktop; tombol mic otomatis disembunyikan di browser itu.
+    // ---------------------------------------------------------------------
+    let recognition = null;
+    let isListening = false;
+
+    function setupSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            elements.micBtn.style.display = "none";
+            return;
+        }
+
+        recognition = new SpeechRecognition();
+        recognition.lang = "id-ID";
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = function () {
+            isListening = true;
+            elements.micBtn.classList.add("jarvis-listening");
+        };
+
+        recognition.onresult = function (event) {
+            const transcript = event.results[0][0].transcript;
+            const existing = elements.input.value.trim();
+            elements.input.value = existing ? existing + " " + transcript : transcript;
+            autoResizeInput();
+            elements.input.focus();
+        };
+
+        recognition.onerror = function (event) {
+            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+                appendMessage("Akses mikrofon ditolak. Izinkan akses mikrofon di pengaturan browser untuk memakai input suara.", "bot");
+            }
+        };
+
+        recognition.onend = function () {
+            isListening = false;
+            elements.micBtn.classList.remove("jarvis-listening");
+        };
+    }
+
+    function toggleListening() {
+        if (!recognition) return;
+        if (isListening) {
+            recognition.stop();
+        } else {
+            try {
+                recognition.start();
+            } catch (e) {
+                // recognition sudah berjalan / diklik dobel, abaikan
+            }
+        }
+    }
+
+    function bindEvents() {
+        elements.fab.addEventListener("click", togglePanel);
+        elements.closeBtn.addEventListener("click", closePanel);
+        elements.sendBtn.addEventListener("click", handleSend);
+        elements.micBtn.addEventListener("click", toggleListening);
+
+        elements.input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        elements.input.addEventListener("input", autoResizeInput);
+
+        document.addEventListener("click", function (e) {
+            if (!isOpen) return;
+            const clickedInsideJarvis = e.target.closest("#jarvisRoot");
+            if (!clickedInsideJarvis) closePanel();
+        });
+
+        elements.panel.addEventListener("click", function (e) {
+            e.stopPropagation();
+        });
+    }
+
+    function init() {
+        buildMarkup();
+        bindEvents();
+        setupSpeechRecognition();
+        appendMessage(CONFIG.greeting, "bot");
+    }
+
+    return { init, open: openPanel, close: closePanel, toggle: togglePanel };
+})();
+
+document.addEventListener("DOMContentLoaded", function () {
+    JarvisApp.init();
+});
+</script>
+
+</body>
+</html>
