@@ -144,7 +144,13 @@
         '<span class="chip role-chip">' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</span>';
     }
     var k = document.getElementById('btnKeluar'); if (k) k.onclick = function (e) { e.preventDefault(); SimonAPI.logout(); };
-    var m = document.getElementById('btnMenu'); if (m) m.onclick = function () { document.body.classList.toggle('nav-open'); };
+    
+var m = document.getElementById('btnMenu');
+if (m) m.onclick = function (e) {
+  e.stopPropagation();
+  document.body.classList.toggle('nav-open');
+};
+
     var sc = document.querySelector('.content'); if (sc) sc.addEventListener('click', function () { document.body.classList.remove('nav-open'); });
     var mb = document.getElementById('musicBtn'); if (mb) Music.bind(mb);
   }
