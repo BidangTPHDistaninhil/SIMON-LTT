@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manajemen Akun · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="pengguna" data-title="Manajemen Akun" data-roles="ADMIN,PETUGAS_KABUPATEN">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div class="card"><div class="row"><div><h2 style="margin:0"><span class="bar"></span>Akun pengguna</h2><div class="sub" id="hint"></div></div><div class="fix"><button class="btn" id="btnBaru">+ Tambah Akun</button></div></div></div>
+<div class="card"><div class="table-wrap"><table><thead><tr><th>Username</th><th>Nama</th><th>Peran</th><th>Kecamatan</th><th>Status</th><th></th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<script>
+SimonShell.ready(async function(me){
+  var U=SimonUI,ref=await SimonAPI.call('ref.get'),users=[],mgr=(me.izin&&me.izin.kelolaAkun)||[],L=SimonShell.ROLE_LABEL;
+  hint.textContent=me.role==='ADMIN'?'Administrator dapat membuat dan mengelola akun KADIS, KABID, PETUGAS_KABUPATEN, dan PETUGAS_KECAMATAN. Akun ADMIN hanya dikelola dari editor Apps Script.':'Anda dapat membuat dan mengelola akun PETUGAS_KECAMATAN.';
+  var kecOpts=ref.semuaKecamatan.map(function(k){return U.opt(k,k);}).join('');
+  function dlg(html,onOk,okLabel){var d=document.createElement('dialog');d.innerHTML=html+'<div class="acts"><button class="btn ghost" data-x="0">Batal</button><button class="btn" data-x="1">'+(okLabel||'Simpan')+'</button></div>';document.body.appendChild(d);
+    d.addEventListener('click',async function(e){var x=e.target.getAttribute&&e.target.getAttribute('data-x');if(x==='0'){d.close();d.remove();}if(x==='1'){U.busy(e.target,true);try{await onOk(d);d.close();d.remove();load();}catch(er){U.toast(U.errMsg(er),true);U.busy(e.target,false);}}});d.showModal();return d;}
+  async function load(){
+    tb.innerHTML='<tr><td colspan="6" class="empty">Memuat…</td></tr>';
+    try {
+  users = await SimonAPI.call('user.list');
+} catch(e) {
+  users = [];
+  tb.innerHTML = '<tr><td colspan="6" class="empty">Gagal memuat daftar akun.</td></tr>';
+  U.toast(U.errMsg(e), true);
+  return;
+}
+    tb.innerHTML=users.map(function(u,i){var a=u.dapatDikelola?'<button class="btn ghost sm" data-a="edit" data-i="'+i+'">Ubah</button> <button class="btn ghost sm" data-a="reset" data-i="'+i+'">Reset password</button> <button class="btn ghost sm" data-a="st" data-i="'+i+'">'+(u.status==='AKTIF'?'Nonaktifkan':'Aktifkan')+'</button>':'<span style="color:var(--muted)">—</span>';
+      return '<tr><td>'+U.esc(u.username)+'</td><td>'+U.esc(u.nama)+'</td><td><span class="badge">'+U.esc(L[u.role]||u.role)+'</span></td><td>'+U.esc(u.kecamatan||'-')+'</td><td><span class="chip '+(u.status==='AKTIF'?'':'danger')+'">'+U.esc(u.status)+'</span>'+(u.mustChange?' <span class="chip warn">wajib ganti password</span>':'')+'</td><td style="white-space:nowrap">'+a+'</td></tr>';}).join('');
+  }
+  btnBaru.onclick=function(){
+    var roleSel=mgr.length>1?'<label>Peran</label><select id="fr">'+mgr.map(function(r){return U.opt(r,L[r]||r,r==='PETUGAS_KECAMATAN');}).join('')+'</select>':'<input type="hidden" id="fr" value="'+U.esc(mgr[0]||'PETUGAS_KECAMATAN')+'">';
+    var d=dlg('<h3>Tambah Akun</h3>'+roleSel+'<label>Username (huruf kecil, angka, titik, strip)</label><input id="fu" autocomplete="off"><label>Nama lengkap</label><input id="fn"><div id="boxKec"><label>Kecamatan tugas</label><select id="fk">'+kecOpts+'</select></div><label>Password sementara (min. 8 karakter)</label><input id="fp" type="password" autocomplete="new-password"><p style="color:var(--muted);margin-top:8px">Pengguna wajib menggantinya saat login pertama.</p>',
+      async function(d){await SimonAPI.call('user.create',{username:d.querySelector('#fu').value,nama:d.querySelector('#fn').value,role:d.querySelector('#fr').value,kecamatan:d.querySelector('#fk').value,password:d.querySelector('#fp').value});U.toast('Akun dibuat.');});
+    var fr=d.querySelector('#fr'),sync=function(){d.querySelector('#boxKec').style.display=fr.value==='PETUGAS_KECAMATAN'?'':'none';};fr.onchange=sync;sync();
+  };
+  tb.onclick=async function(e){var a=e.target.getAttribute('data-a');if(!a)return;var u=users[+e.target.getAttribute('data-i')];
+    if(a==='edit')dlg('<h3>Ubah akun '+U.esc(u.username)+'</h3><p style="color:var(--muted)">'+U.esc(L[u.role]||u.role)+'</p><label>Nama lengkap</label><input id="fn" value="'+U.esc(u.nama)+'">'+(u.role==='PETUGAS_KECAMATAN'?'<label>Kecamatan tugas</label><select id="fk">'+ref.semuaKecamatan.map(function(k){return U.opt(k,k,k===u.kecamatan);}).join('')+'</select><p style="color:var(--muted);margin-top:8px">Mengubah kecamatan mengeluarkan petugas dari sesi yang sedang aktif.</p>':''),async function(d){var p={username:u.username,nama:d.querySelector('#fn').value};var k=d.querySelector('#fk');if(k)p.kecamatan=k.value;await SimonAPI.call('user.update',p);U.toast('Akun diperbarui.');});
+    if(a==='reset')dlg('<h3>Reset password '+U.esc(u.username)+'</h3><label>Password sementara baru (min. 8 karakter)</label><input id="fp" type="password" autocomplete="new-password">',async function(d){await SimonAPI.call('user.resetPassword',{username:u.username,password:d.querySelector('#fp').value});U.toast('Password direset. Pengguna wajib menggantinya saat login.');},'Reset');
+    if(a==='st'){var to=u.status==='AKTIF'?'NONAKTIF':'AKTIF';if(await U.confirm((to==='NONAKTIF'?'Nonaktifkan':'Aktifkan')+' akun?',u.username,'Ya',to==='NONAKTIF')){try{await SimonAPI.call('user.setStatus',{username:u.username,status:to});U.toast('Status diperbarui.');load();}catch(er){U.toast(U.errMsg(er),true);}}}
+  };
+  load();
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

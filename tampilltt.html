@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Besar · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="tampilltt" data-title="Dashboard Besar" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="state"></div>
+<div class="card"><div class="toolbar"><div><b>Monitoring Terpadu LTT</b><div class="sub" id="upd"></div></div><span class="sp"></span><button class="btn ghost sm" id="btnRefresh">⟳ Muat ulang data</button></div></div>
+
+<div class="sec-h sect" id="s-harian"><h2>1 · Harian</h2><span class="sp"></span><span class="linkrow"><a href="harian.html">Laporan Harian →</a></span></div>
+<div class="kpis" id="hK"></div>
+<div class="grid g2"><div class="card"><h2><span class="bar"></span>Top 5 Kecamatan (LTT)</h2><ol class="rank" id="hRank"></ol></div><div class="card"><h2><span class="bar" style="background:#f59e0b"></span>Top 5 Kecamatan (Jagung)</h2><ol class="rank" id="hJag"></ol></div></div>
+
+<div class="sec-h sect" id="s-capaian"><h2>2 · Capaian Target</h2><span class="tag" id="cLabel"></span><span class="sp"></span><span class="linkrow"><a href="capaian.html">Capaian Target →</a></span></div>
+<div class="kpis" id="cK"></div>
+<div class="card"><h2><span class="bar"></span>5 Kecamatan dengan Capaian Tertinggi</h2><div id="cRows"></div></div>
+
+<div class="sec-h sect" id="s-bulanan"><h2>3 · Bulanan</h2><span class="tag" id="bLabel"></span><span class="sp"></span><span class="linkrow"><a href="bulanan.html">Laporan Bulanan →</a></span></div>
+<div class="kpis" id="bK"></div>
+<div class="card"><h2><span class="bar"></span>LTT per Minggu (Ha)</h2><div class="chart-box"><canvas id="cWeek"></canvas></div></div>
+
+<div class="sec-h sect" id="s-analisis"><h2>4 · Analisis Tanam &amp; Panen</h2><span class="sp"></span><span class="linkrow"><a href="analisis.html">Analisis lengkap →</a></span></div>
+<div class="kpis" id="aK"></div>
+<div class="card"><h2><span class="bar"></span>6 Kecamatan dengan Tanam Terbesar</h2><div class="chart-box"><canvas id="cTop"></canvas></div></div>
+<script>
+SimonShell.ready(function(me){
+  var R=SimonReport,U=SimonUI,rows=[],target=[];
+  function K(el,items){el.innerHTML=items.map(function(k){return '<div class="kpi '+(k[2]||'')+'"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>';}).join('');}
+  function bulanNum(b){var s=String(b===undefined||b===null?'':b).trim().toUpperCase();if(/^\d{1,2}$/.test(s))return ('0'+s).slice(-2);return R.MONTH_NUM[s]||'';}
+  function rank(el,list,empty){el.innerHTML=list.length?list.map(function(r,i){return '<li><span class="n">'+(i+1)+'</span><span class="nm">'+U.esc(r[0])+'</span><span class="vl">'+U.fmt(r[1])+' Ha</span></li>';}).join(''):'<li class="empty">'+empty+'</li>';}
+  function harian(){
+    var tot=0,tod=0,op=0,rg=0,kec={},jag={};
+    rows.forEach(function(d){var j=d.jenis.toUpperCase(),k=d.kec||'(Tanpa Kecamatan)';tot+=d.luas;if(j.indexOf('OPLAH')!==-1)op+=d.luas;if(j.indexOf('REGULER')!==-1)rg+=d.luas;if(j.indexOf('JAGUNG')!==-1)jag[k]=(jag[k]||0)+d.luas;if(d.tgl===me.serverDate)tod+=d.luas;kec[k]=(kec[k]||0)+d.luas;});
+    K(hK,[['Total LTT',U.fmt(tot)+' <small>Ha</small>','em'],['LTT Hari Ini',U.fmt(tod)+' <small>Ha</small>','gold'],['OPLAH',U.fmt(op)+' <small>Ha</small>'],['Reguler',U.fmt(rg)+' <small>Ha</small>']]);
+    rank(hRank,R.topN(kec,5),'Belum ada data.');rank(hJag,R.topN(jag,5),'Belum ada data Jagung.');
+  }
+  function capaian(){
+    var months=rows.map(function(d){return d.tgl.slice(0,7);}).filter(Boolean).sort(),sel=months.length?months[months.length-1]:me.serverDate.slice(0,7),p=sel.split('-');
+    cLabel.textContent='Target vs Realisasi — '+R.bulanLabel(p[1],p[0]);
+    var rm={},tm={};rows.filter(function(d){return d.tgl.slice(0,7)===sel;}).forEach(function(d){var k=(d.kec||'').toUpperCase();rm[k]=(rm[k]||0)+d.luas;});
+    target.forEach(function(d){if(String(d.TAHUN)+'-'+bulanNum(d.BULAN)===sel){var k=String(d.KECAMATAN||'').toUpperCase();tm[k]=(tm[k]||0)+U.num(d.TARGET);}});
+    var tT=0,tR=0;Object.keys(tm).forEach(function(k){tT+=tm[k];});Object.keys(rm).forEach(function(k){tR+=rm[k];});var pc=tT?tR/tT*100:0;
+    var keys=Object.keys(Object.assign({},tm,rm));
+    K(cK,[['Target',U.fmt(tT)+' <small>Ha</small>','gold'],['Realisasi',U.fmt(tR)+' <small>Ha</small>','em'],['Capaian',pc.toFixed(1)+'<small>%</small>'],['Jumlah Kecamatan',keys.length+' <small>Kec</small>']]);
+    var top=keys.map(function(k){var r=rm[k]||0,t=tm[k]||0;return {k:k,r:r,t:t,p:t?r/t*100:0};}).sort(function(a,b){return b.p-a.p;}).slice(0,5);
+    cRows.innerHTML=top.length?top.map(function(r){var s=R.statusColor(r.p);return '<div class="prog"><div class="top"><span>'+U.esc(r.k)+'</span><span><b>'+U.fmt(r.r)+'</b> / '+U.fmt(r.t)+' Ha</span></div><div class="tr"><i style="width:'+Math.min(r.p,100)+'%;background:'+s.solid+'"></i></div><span class="pc" style="color:'+s.solid+'">'+r.p.toFixed(1)+'%</span></div>';}).join(''):'<div class="empty">Belum ada data capaian.</div>';
+  }
+  function bulanan(){
+    var cur=me.serverDate.slice(0,7),p=cur.split('-');bLabel.textContent='Rekap tanam, olah lahan & panen — '+R.bulanLabel(p[1],p[0]);
+    var d=rows.filter(function(x){return x.tgl.slice(0,7)===cur;}),l=0,o=0,pn=0,kc={},w=[0,0,0,0];
+    d.forEach(function(x){l+=x.luas;o+=x.olah;pn+=x.panen;if(x.kec)kc[x.kec]=1;var wk=R.weekOfMonth(x.tgl);if(wk)w[wk-1]+=x.luas;});
+    K(bK,[['LTT bulan ini',U.fmt(l)+' <small>Ha</small>','em'],['Olah Lahan',U.fmt(o)+' <small>Ha</small>','blue'],['Luas Panen',U.fmt(pn)+' <small>Ha</small>','gold'],['Kecamatan',Object.keys(kc).length+' <small>Kec</small>']]);
+    R.chart('cWeek',R.barCfg(['Minggu 1','Minggu 2','Minggu 3','Minggu 4'],[{label:'LTT (Ha)',data:w,color:'rgba(5,150,105,.85)',thick:56}])).catch(function(e){U.toast(U.errMsg(e),true);});
+  }
+  function analisis(){
+    var t=0,pn=0,m={};rows.forEach(function(d){t+=d.luas;pn+=d.panen;var k=d.kec||'(Tanpa Kecamatan)';if(!m[k])m[k]={t:0,p:0};m[k].t+=d.luas;m[k].p+=d.panen;});
+    var rs=t?pn/t*100:0;K(aK,[['Total Tanam',U.fmt(t)+' <small>Ha</small>','em'],['Total Panen',U.fmt(pn)+' <small>Ha</small>','gold'],['Selisih',U.fmt(t-pn)+' <small>Ha</small>','warn'],['Rasio Panen',rs.toFixed(1)+'<small>%</small>','blue']]);
+    var top=Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1].t-a[1].t;}).slice(0,6);
+    R.chart('cTop',R.barCfg(top.map(function(x){return x[0];}),[{label:'Tanam',data:top.map(function(x){return x[1].t;}),color:'rgba(15,77,59,.9)',thick:24},{label:'Panen',data:top.map(function(x){return x[1].p;}),color:'rgba(245,158,11,.9)',thick:24}])).catch(function(){});
+  }
+  async function loadAll(){var d=await R.load({target:true});rows=d.rows;target=d.target;harian();capaian();bulanan();analisis();upd.textContent='Data diperbarui: '+new Date().toLocaleString('id-ID');}
+  btnRefresh.onclick=function(){R.boot(loadAll);};
+  R.boot(loadAll);
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

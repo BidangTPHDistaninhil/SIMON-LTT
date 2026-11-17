@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<style>
+.login{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr}
+.hero{background:linear-gradient(160deg,var(--forest),#0a5a43 70%,#0b6b4f);color:#d7efe4;padding:48px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-120px;bottom:-120px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(201,162,39,.35),transparent 70%)}
+.hero .logo{width:64px;height:64px;background:#fff;border-radius:16px;padding:6px;display:flex;align-items:center;justify-content:center}
+.hero .logo img{max-width:100%;max-height:100%}
+.hero h1{color:#fff;font-size:40px;font-weight:800;letter-spacing:.03em;margin:22px 0 6px}
+.hero p.s{font-size:16px;color:#bfe6d3;max-width:420px}
+.hero .bar{width:64px;height:4px;background:var(--gold);border-radius:2px;margin:18px 0}
+.hero small{color:#8fc9b0;position:relative;z-index:1}
+.panel{display:flex;align-items:center;justify-content:center;padding:32px}
+.box{width:100%;max-width:400px}.box h2{font-size:24px;color:var(--forest);margin-bottom:4px}.box .sub{color:var(--muted);margin-bottom:12px}
+#msg{margin-top:12px;color:var(--danger);font-weight:600;min-height:20px}
+.ok{background:var(--emerald-soft);color:var(--emerald-d);padding:10px 12px;border-radius:10px;margin-bottom:10px;font-weight:600}
+@media(max-width:820px){.login{grid-template-columns:1fr}.hero{padding:28px;min-height:auto}.hero h1{font-size:30px}}
+</style>
+</head>
+<body data-mode="public">
+<div class="login">
+  <section class="hero">
+    <div>
+      <div class="logo"><img src="https://upload.wikimedia.org/wikipedia/commons/a/a3/Logo_kabupaten_indragiri_hilir.jpg" referrerpolicy="no-referrer" alt="Logo Kabupaten Indragiri Hilir"></div>
+      <h1>SIMON-LTT</h1>
+      <p class="s">Sistem Informasi Monitoring Luas Tambah Tanam</p>
+      <div class="bar"></div>
+      <p class="s">Bidang Tanaman Pangan dan Hortikultura<br>Dinas Pertanian Kabupaten Indragiri Hilir</p>
+    </div>
+    <small>Akses terbatas untuk petugas dan pimpinan. Seluruh aktivitas tercatat.</small>
+  </section>
+  <section class="panel">
+    <form class="box" id="f" autocomplete="on">
+      <h2>Masuk</h2><div class="sub">Gunakan akun yang diberikan oleh petugas kabupaten.</div>
+      <div id="info"></div>
+      <label for="u">Username</label><input id="u" name="username" autocomplete="username" autocapitalize="none" required>
+      <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+      <button class="btn" id="b" type="submit" style="width:100%;margin-top:16px;padding:12px">Masuk Sistem</button>
+      <div id="msg" role="alert"></div>
+    </form>
+  </section>
+</div>
+<script>
+(function(){
+  var U=SimonUI;
+  if(SimonAPI.session()){location.replace(SIMON_CONFIG.HOME_PAGE);return;}
+  if(new URLSearchParams(location.search).get('expired'))document.getElementById('info').innerHTML='<div class="banner warn">Sesi Anda berakhir. Silakan masuk kembali.</div>';
+  document.getElementById('f').addEventListener('submit',async function(e){
+    e.preventDefault();var m=document.getElementById('msg'),b=document.getElementById('b');m.textContent='';
+    var u=document.getElementById('u').value.trim(),p=document.getElementById('p').value;
+    if(!u||!p){m.textContent='Harap isi username dan password.';return;}
+    U.busy(b,true,'Memproses…');
+    try{var pr=await SimonAPI.login(u,p);location.replace(pr.mustChange?'pengaturan.html?ganti=1':SIMON_CONFIG.HOME_PAGE);}
+    catch(er){m.textContent=er.code==='NETWORK'?er.message:(er.code==='AUTH_FAILED'?er.message:U.errMsg(er));U.busy(b,false);document.getElementById('p').value='';}
+  });
+})();
+</script>
+</body>
+</html>

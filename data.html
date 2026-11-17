@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data LTT · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="data" data-title="Data LTT" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div class="card"><div class="row">
+<div style="flex:2 1 220px"><label for="fq">Cari</label><input id="fq" placeholder="Desa, pelapor, kelompok tani, keterangan…"></div>
+<div id="wrapKec"><label for="fkec">Kecamatan</label><select id="fkec"></select></div>
+<div><label for="fjenis">Jenis LTT</label><select id="fjenis"></select></div>
+<div><label for="fmetode">Metode Tanam</label><select id="fmetode"></select></div>
+<div><label for="fdari">Dari tanggal</label><input type="date" id="fdari"></div>
+<div><label for="fsampai">Sampai tanggal</label><input type="date" id="fsampai"></div>
+<div class="fix"><button class="btn" id="btnCari">Terapkan</button> <button class="btn ghost" id="btnReset">Reset</button></div></div></div>
+<div class="card"><div class="pager" style="margin:0 0 10px"><span id="info"></span><span id="total" class="chip gold"></span><span class="dl">Unduh data terfilter: <button class="btn sm" data-export="xlsx">⬇ Excel</button><button class="btn sm" data-export="pdf">⬇ PDF</button><button class="btn sm" data-export="csv">⬇ CSV</button></span></div>
+<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Kecamatan</th><th>Desa/Kelurahan</th><th>Kelompok Tani</th><th>Jenis LTT</th><th>Komoditas</th><th>Metode</th><th class="num">LTT (Ha)</th><th class="num">Olah (Ha)</th><th class="num">Panen (Ha)</th><th>Pelapor</th><th>Aksi</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="pager"><span id="pg"></span><span><button class="btn ghost sm" id="prev">‹ Sebelumnya</button> <button class="btn ghost sm" id="next">Berikutnya ›</button></span></div></div>
+<script>
+SimonShell.ready(async function(me){
+  var U=SimonUI,ref=await SimonAPI.call('ref.get'),page=1,pages=1,jl={};ref.jenisLtt.forEach(function(j){jl[j.v]=j.l;});
+  fkec.innerHTML=U.opt('','Semua kecamatan')+ref.kecamatan.map(function(k){return U.opt(k,k);}).join('');
+  if(me.role==='PETUGAS_KECAMATAN'){wrapKec.style.display='none';}
+  fjenis.innerHTML=U.opt('','Semua jenis')+ref.jenisLtt.map(function(j){return U.opt(j.v,j.l);}).join('');
+  fmetode.innerHTML=U.opt('','Semua metode')+ref.metodeTanam.map(function(m){return U.opt(m,m);}).join('');
+  function filt(){return {q:fq.value.trim(),kecamatan:fkec.value,jenis:fjenis.value,metode:fmetode.value,dari:fdari.value,sampai:fsampai.value};}
+  function dash(v,m){return v?U.esc(v):'<span style="color:var(--muted)">'+(m||'Belum diisi')+'</span>';}
+  async function load(){
+    document.getElementById('tb').innerHTML='<tr><td colspan="12" class="empty">Memuat…</td></tr>';
+    var d;try{d=await SimonAPI.call('ltt.list',{filter:filt(),page:page,pageSize:25});}catch(e){U.toast(U.errMsg(e),true);document.getElementById('tb').innerHTML='<tr><td colspan="12" class="empty">Gagal memuat data.</td></tr>';return;}
+    page=d.page;pages=d.pages;
+    info.textContent=d.total+' data';total.textContent='Total LTT terfilter: '+U.fmt(d.totalLuas,' Ha');
+    pg.textContent='Halaman '+d.page+' dari '+d.pages;prev.disabled=d.page<=1;next.disabled=d.page>=d.pages;
+    document.getElementById('tb').innerHTML=d.rows.length?d.rows.map(function(o,i){
+      var act='';
+      if(o.DAPAT_DIUBAH)act+='<a class="btn ghost sm" href="input.html?edit='+encodeURIComponent(o.ID)+'">Edit</a> <button class="btn danger sm" data-a="del" data-i="'+i+'">Hapus</button> ';
+      if(o.ID_PENGIRIMAN)act+='<button class="btn ghost sm" data-a="batch" data-i="'+i+'">Pengiriman</button>';
+      return '<tr><td>'+U.esc(o.TANGGAL)+'</td><td>'+U.esc(o.KECAMATAN)+'</td><td>'+U.esc(o['DESA/KELURAHAN'])+'</td><td>'+dash(o['KELOMPOK TANI'],'-')+'</td><td>'+U.esc(jl[o['JENIS LTT']]||o['JENIS LTT'])+'</td><td>'+dash(o.KOMODITAS)+'</td><td>'+dash(o['METODE TANAM'])+'</td><td class="num">'+U.fmt(U.num(o['LUAS TAMBAH TANAM']))+'</td><td class="num">'+U.fmt(U.num(o['OLAH LAHAN']))+'</td><td class="num">'+U.fmt(U.num(o['LUAS PANEN']))+'</td><td>'+U.esc(o['NAMA PELAPOR'])+'</td><td style="white-space:nowrap">'+(act||'<span style="color:var(--muted)">—</span>')+'</td></tr>';}).join(''):'<tr><td colspan="12" class="empty">Tidak ada data yang cocok.</td></tr>';
+    load.rows=d.rows;
+  }
+  async function hapus(o){
+    var ok=await U.confirm('Hapus data ini?',o.KECAMATAN+' · '+o['DESA/KELURAHAN']+' · '+o.TANGGAL+' · LTT '+U.fmt(U.num(o['LUAS TAMBAH TANAM']))+' Ha. Tindakan ini tidak dapat dibatalkan (salinan data tercatat di log).','Hapus',true);
+    if(!ok)return;
+try{
+  await SimonAPI.call('ltt.delete',{
+    id:o.ID,
+    expectedVersion:o.VERSI
+  });
+  U.toast('Data dihapus');
+  return true;
+}catch(e){
+  U.toast(U.errMsg(e),true);
+}
+  }
+  document.getElementById('tb').onclick=async function(e){var a=e.target.getAttribute('data-a');if(!a)return;var o=load.rows[+e.target.getAttribute('data-i')];
+    if(a==='del'){if(await hapus(o))load();}
+    if(a==='batch'){
+      var b;try{b=await SimonAPI.call('ltt.getBatch',{idPengiriman:o.ID_PENGIRIMAN});}catch(er){U.toast(U.errMsg(er),true);return;}
+      var d=document.createElement('dialog');d.className='wide';
+      d.innerHTML='<h3>Pengiriman '+U.esc(b.idPengiriman)+'</h3><p style="color:var(--muted)">'+b.rows.length+' baris dikirim bersama oleh '+U.esc(b.rows[0]['NAMA PELAPOR'])+' pada '+U.esc(b.rows[0].TIMESTAMP)+'.</p><div class="table-wrap"><table><thead><tr><th>Desa/Kelurahan</th><th>Jenis</th><th class="num">LTT</th><th class="num">Olah</th><th class="num">Panen</th><th>Aksi</th></tr></thead><tbody>'+b.rows.map(function(r,i){return '<tr><td>'+U.esc(r['DESA/KELURAHAN'])+'</td><td>'+U.esc(jl[r['JENIS LTT']]||r['JENIS LTT'])+'</td><td class="num">'+U.fmt(U.num(r['LUAS TAMBAH TANAM']))+'</td><td class="num">'+U.fmt(U.num(r['OLAH LAHAN']))+'</td><td class="num">'+U.fmt(U.num(r['LUAS PANEN']))+'</td><td>'+(r.DAPAT_DIUBAH?'<a class="btn ghost sm" href="input.html?edit='+encodeURIComponent(r.ID)+'">Edit</a> <button class="btn danger sm" data-b="'+i+'">Hapus</button>':'—')+'</td></tr>';}).join('')+'</tbody></table></div><div class="acts"><button class="btn ghost" data-c="1">Tutup</button></div>';
+      document.body.appendChild(d);
+      d.addEventListener('click',async function(ev){if(ev.target.getAttribute('data-c')){d.close();d.remove();}var bi=ev.target.getAttribute('data-b');if(bi!==null){d.close();d.remove();if(await hapus(b.rows[+bi]))load();}});
+      d.showModal();
+    }
+  };
+  btnCari.onclick=function(){page=1;load();};fq.onkeydown=function(e){if(e.key==='Enter'){page=1;load();}};
+  btnReset.onclick=function(){fq.value='';fkec.value='';fjenis.value='';fmetode.value='';fdari.value='';fsampai.value='';page=1;load();};
+  prev.onclick=function(){if(page>1){page--;load();}};next.onclick=function(){if(page<pages){page++;load();}};
+  // Ekspor: data diambil dari server (export.data) dengan wilayah dipaksa sesuai peran, lalu dirakit menjadi berkas
+  document.querySelectorAll('[data-export]').forEach(function(b){b.onclick=async function(){
+    var fmt=b.getAttribute('data-export');U.busy(b,true,'Menyiapkan…');
+    try{
+      var d=await SimonAPI.call('export.data',{format:fmt,filter:filt()});
+      if(d.terpotong)U.toast('Hasil dipotong pada '+d.batas+' baris. Persempit filter untuk data lengkap.',true);
+      await SimonReport.exportTable({format:fmt,title:'Data Luas Tambah Tanam (LTT)',subtitle:'Cakupan: '+d.cakupan+' | '+d.jumlah+' baris | dibuat '+d.dibuatPada.slice(0,16).replace('T',' ')+' WIB',head:d.columns,body:d.rows,numCols:[7,8,9],file:'Data_LTT',sheet:'Data LTT',noLog:true});
+    }catch(e){U.toast(U.errMsg(e),true);}finally{U.busy(b,false);}
+  };});
+  load();
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

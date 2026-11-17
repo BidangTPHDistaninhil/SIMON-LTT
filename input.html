@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Input LTT · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="input" data-title="Input LTT" data-roles="ADMIN,PETUGAS_KABUPATEN,PETUGAS_KECAMATAN">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="banner"></div>
+<div class="card"><h2><span class="bar"></span>Identitas Pelapor</h2>
+<div class="grid g3">
+<div><label for="pelapor">Nama Pelapor</label><input id="pelapor" maxlength="100" placeholder="Masukkan nama pelapor..." autocomplete="off"></div>
+<div><label for="kecamatan">Kecamatan</label><select id="kecamatan"></select></div>
+<div><label for="tanggal">Tanggal</label><input type="date" id="tanggal"></div>
+</div></div>
+<div class="card"><h2><span class="bar"></span>Data Desa &amp; Kelompok Tani</h2>
+<div id="desaBox"><div class="empty" id="emptyDesa">Belum ada desa ditambahkan.<br>Klik tombol di bawah untuk mulai.</div></div>
+<button class="btn ghost" id="btnDesa" style="margin-top:6px">+ Tambah Desa</button></div>
+<div class="card"><h2><span class="bar"></span>Rekap Semua Jenis LTT (Ha)</h2><div class="rekap" id="rkLtt"></div></div>
+<div class="card"><h2><span class="bar" style="background:#3b82f6"></span>Rekap Olah Lahan (Ha)</h2><div class="rekap olah" id="rkOlah"></div></div>
+<div class="card"><h2><span class="bar"></span>Rekap Luas Panen (Ha)</h2><div class="rekap panen" id="rkPanen"></div></div>
+<div class="card"><button class="btn" id="btnSimpan" style="width:100%;padding:13px">Simpan Data LTT</button></div>
+<datalist id="dlPoktan"></datalist>
+<script>
+SimonShell.ready(async function(me){
+  var U=SimonUI, isKab=me.role!=='PETUGAS_KECAMATAN', qs=new URLSearchParams(location.search), editId=qs.get('edit');
+  var ref, idPeng=SimonAPI.newId(), clock=SimonAPI.serverClock(me), editing=null, closed=false, desaN=0;
+  try{ref=await SimonAPI.call('ref.get');}catch(e){U.toast(U.errMsg(e),true);return;}
+  var JENIS=ref.jenisLtt, kecSel=document.getElementById('kecamatan'), tgl=document.getElementById('tanggal'), box=document.getElementById('desaBox');
+  kecSel.innerHTML=ref.kecamatan.map(function(k){return U.opt(k,k);}).join('');
+  if(!isKab){kecSel.value=me.kecamatan;kecSel.disabled=true;tgl.disabled=true;}
+  tgl.value=ref.serverDate; tgl.max=ref.serverDate;
+
+  function desaOptions(sel,cur){
+    var w=ref.wilayah[kecSel.value]||{kelurahan:[],desa:[]}, h='<option value="">-- Pilih Desa/Kelurahan --</option>', found=false;
+    w.kelurahan.forEach(function(k){var v='Kelurahan '+k;if(v===cur)found=true;h+=U.opt(v,k+' (Kelurahan)',v===cur);});
+    w.desa.forEach(function(d){var v='Desa '+d;if(v===cur)found=true;h+=U.opt(v,d+' (Desa)',v===cur);});
+    if(cur&&!found)h+=U.opt(cur,cur+' (data lama)',true);
+    sel.innerHTML=h;
+  }
+  function jenisOpts(cur){var h='',f=false;JENIS.forEach(function(j){if(j.v===cur)f=true;h+=U.opt(j.v,j.l,j.v===cur);});if(cur&&!f)h+=U.opt(cur,cur+' (data lama)',true);return h;}
+  function metodeOpts(cur,isNew){var h=(!isNew&&!cur)?U.opt('','-- Belum diisi --',true):'';ref.metodeTanam.forEach(function(m){h+=U.opt(m,m,cur?m===cur:m==='REGULER');});return h;}
+  function komOpts(cur){var h=U.opt('','-- Pilih Komoditas --',!cur),f=false;ref.komoditas.forEach(function(k){if(k===cur)f=true;h+=U.opt(k,k,k===cur);});if(cur&&!f)h+=U.opt(cur,cur,true);return h;}
+
+  function addDesa(cur){
+    var e=document.getElementById('emptyDesa');if(e)e.remove();
+    desaN++;var d=document.createElement('div');d.className='desa';
+    d.innerHTML='<div class="desa-h"><span>Desa #'+desaN+'</span><span>'+(editing?'':'<button class="btn ghost sm" data-a="isi">+ isi data</button> <button class="btn danger sm" data-a="hapusDesa">Hapus</button>')+'</span></div><select class="desaSel"></select><div class="rows"></div>';
+    box.appendChild(d);desaOptions(d.querySelector('.desaSel'),cur);
+    d.querySelector('.desaSel').onchange=function(){suggest(d);};
+    return d;
+  }
+  function addRow(desaEl,v){
+    v=v||{};var r=document.createElement('div');r.className='poktan';
+    r.innerHTML=
+     '<div><label>Kelompok Tani (opsional)</label><input class="f-poktan" list="dlPoktan" maxlength="150" value="'+U.esc(v.poktan||'')+'"></div>'+
+     '<div><label>LTT (Ha)</label><input class="f-luas" inputmode="decimal" placeholder="mis. 959,50" value="'+U.esc(v.luas===undefined?'':v.luas)+'"></div>'+
+     '<div><label>Jenis LTT</label><select class="f-jenis">'+jenisOpts(v.jenis||'reguler')+'</select></div>'+
+     '<div class="f-kom"><label>Komoditas</label><select class="f-kom-sel">'+komOpts(v.komoditas||'')+'</select></div>'+
+     '<div><label>Metode Tanam</label><select class="f-metode">'+metodeOpts(v.metode||'',!editing)+'</select></div>'+
+     '<div><label>Olah Lahan Hari Ini (Ha)</label><input class="f-olah" inputmode="decimal" placeholder="Olah Lahan" value="'+U.esc(v.olah===undefined?'':v.olah)+'"></div>'+
+     '<div><label>Realisasi Luas Panen Hari Ini (Ha)</label><input class="f-panen" inputmode="decimal" placeholder="Luas Panen Hari Ini" value="'+U.esc(v.panen===undefined?'':v.panen)+'"></div>'+
+     '<div class="f-del">'+(editing?'':'<button class="btn danger sm" data-a="hapusBaris" title="Hapus baris">✕ Hapus baris</button>')+'</div>'+
+     '<div style="grid-column:1/-1"><label>Keterangan</label><input class="f-ket" maxlength="500" placeholder="Keterangan" value="'+U.esc(v.ket||'')+'"></div>';
+    if(!ref.komoditas.length&&!v.komoditas)r.querySelector('.f-kom').style.display='none';
+    desaEl.querySelector('.rows').appendChild(r);return r;
+  }
+  box.addEventListener('click',function(e){var a=e.target.getAttribute('data-a');if(!a)return;var d=e.target.closest('.desa');
+    if(a==='isi')addRow(d);
+    if(a==='hapusBaris'){e.target.closest('.poktan').remove();hitung();}
+    if(a==='hapusDesa'){d.remove();hitung();if(!box.querySelector('.desa')){box.innerHTML='<div class="empty" id="emptyDesa">Belum ada desa ditambahkan.<br>Klik tombol di bawah untuk mulai.</div>';}}
+  });
+  box.addEventListener('input',hitung);box.addEventListener('change',hitung);
+  document.getElementById('btnDesa').onclick=function(){var d=addDesa();addRow(d);};
+  kecSel.onchange=function(){box.querySelectorAll('.desaSel').forEach(function(s){desaOptions(s,'');});};
+
+  var tmr;function suggest(d){clearTimeout(tmr);tmr=setTimeout(async function(){var desa=d.querySelector('.desaSel').value;if(!desa)return;try{var r=await SimonAPI.call('poktan.suggest',{kecamatan:kecSel.value,desa:desa});document.getElementById('dlPoktan').innerHTML=r.items.map(function(x){return '<option value="'+U.esc(x)+'">';}).join('');}catch(e){}},300);}
+
+  // ---- rekap langsung (sama seperti form lama: LTT, Olah Lahan, Luas Panen per Jenis)
+  function buildRekap(id,pref){document.getElementById(id).innerHTML=JENIS.map(function(j){return '<div><span class="rl">'+U.esc(j.l)+'</span><span id="'+pref+j.v+'">0</span></div>';}).join('');}
+  buildRekap('rkLtt','rl_');buildRekap('rkOlah','ro_');buildRekap('rkPanen','rp_');
+  function hitung(){
+    var L={},O={},P={};JENIS.forEach(function(j){L[j.v]=0;O[j.v]=0;P[j.v]=0;});
+    box.querySelectorAll('.poktan').forEach(function(p){var j=p.querySelector('.f-jenis').value;if(L[j]===undefined)return;L[j]+=U.num(p.querySelector('.f-luas').value);O[j]+=U.num(p.querySelector('.f-olah').value);P[j]+=U.num(p.querySelector('.f-panen').value);});
+    function f(v){return v%1===0?String(v):v.toFixed(2);}
+    JENIS.forEach(function(j){document.getElementById('rl_'+j.v).textContent=f(L[j.v]);document.getElementById('ro_'+j.v).textContent=f(O[j.v]);document.getElementById('rp_'+j.v).textContent=f(P[j.v]);});
+  }
+  hitung();
+
+  // ---- batas waktu petugas kecamatan (tampilan; keputusan akhir ada di server)
+  var ban=document.getElementById('banner'),btn=document.getElementById('btnSimpan');
+  function tick(){
+    if(me.role!=='PETUGAS_KECAMATAN')return;
+    var now=clock(),wib=new Date(now.getTime()+7*3600*1000),sec=wib.getUTCHours()*3600+wib.getUTCMinutes()*60+wib.getUTCSeconds(),lim=ref.batasJam*3600,left=lim-sec,off=function(){};
+    if(left<=0){closed=true;btn.disabled=true;ban.innerHTML='<div class="banner danger">Batas waktu pukul '+ref.batasJam+'.00 WIB telah lewat. Input, edit, dan hapus ditutup untuk petugas kecamatan.</div>';}
+    else{var h=Math.floor(left/3600),m=Math.floor(left%3600/60),s=left%60;var t=(h?h+' jam ':'')+m+' menit '+s+' detik';if(!editing)ban.innerHTML='<div class="banner'+(left<1800?' warn':'')+'">Batas input pukul '+ref.batasJam+'.00 WIB · sisa '+t+'</div>';}
+  }
+  setInterval(tick,1000);
+
+  // ---- mode edit
+  if(editId){
+    try{editing=await SimonAPI.call('ltt.get',{id:editId});}catch(e){U.toast(U.errMsg(e),true);setTimeout(function(){location.href='data.html';},1500);return;}
+    document.getElementById('btnDesa').style.display='none';
+    btn.textContent='Simpan Perubahan';
+    ban.innerHTML='<div class="banner edit">MODE EDIT — mengubah satu baris data (ID '+U.esc(editing.ID)+'). Ini bukan data baru. <a href="data.html">Batal dan kembali</a></div>';
+    document.getElementById('pelapor').value=editing['NAMA PELAPOR'];
+    if(isKab){kecSel.value=editing.KECAMATAN;tgl.value=editing.TANGGAL;}else{tgl.value=editing.TANGGAL;}
+    var d=addDesa(editing['DESA/KELURAHAN']);
+    addRow(d,{poktan:editing['KELOMPOK TANI'],luas:editing['LUAS TAMBAH TANAM'],jenis:editing['JENIS LTT'],komoditas:editing.KOMODITAS,metode:editing['METODE TANAM'],olah:editing['OLAH LAHAN'],panen:editing['LUAS PANEN'],ket:editing.KETERANGAN});
+    d.querySelector('.desa-h span').textContent='Desa/Kelurahan';
+    if(!editing.DAPAT_DIUBAH){btn.disabled=true;ban.innerHTML+='<div class="banner warn">Anda tidak dapat mengubah data ini saat ini (di luar wilayah tugas atau batas waktu).</div>';}
+    hitung();
+  }
+
+  // ---- simpan
+  btn.onclick=async function(){
+    if(closed){U.toast('Batas waktu input sudah lewat.',true);return;}
+    var pel=document.getElementById('pelapor').value.trim();
+    if(!pel){U.toast('Nama pelapor wajib diisi',true);document.getElementById('pelapor').focus();return;}
+    var rows=[],bad=null,n=0;
+    box.querySelectorAll('.desa').forEach(function(d){var desa=d.querySelector('.desaSel').value;
+      d.querySelectorAll('.poktan').forEach(function(p){n++;
+        var r={desa:desa,poktan:p.querySelector('.f-poktan').value,luas:p.querySelector('.f-luas').value,jenis:p.querySelector('.f-jenis').value,komoditas:p.querySelector('.f-kom-sel').value,metode:p.querySelector('.f-metode').value,olah:p.querySelector('.f-olah').value,panen:p.querySelector('.f-panen').value,ket:p.querySelector('.f-ket').value};
+        if(!bad){
+          if(!r.desa)bad='Baris '+n+': pilih Desa/Kelurahan.';
+          else if(U.parseNum(r.luas)===null||isNaN(U.parseNum(r.luas)))bad='Baris '+n+': isi LTT (Ha) dengan angka yang valid.';
+          else if(
+  (U.parseNum(r.olah)!==null && isNaN(U.parseNum(r.olah))) ||
+  (U.parseNum(r.panen)!==null && isNaN(U.parseNum(r.panen)))
+) bad='Baris '+n+': Olah Lahan/Luas Panen harus angka yang valid.';
+          else if(!r.metode&&!editing)bad='Baris '+n+': pilih Metode Tanam.';
+        }
+        rows.push(r);});});
+    if(bad){U.toast(bad,true);return;}
+    if(!rows.length){U.toast('Isi minimal 1 data',true);return;}
+    U.busy(btn,true,editing?'Menyimpan…':'Mengirim…');
+    try{
+      if(editing){
+        var r=rows[0],f={pelapor:pel,desa:r.desa,poktan:r.poktan,luas:r.luas,jenis:r.jenis,komoditas:r.komoditas,metode:r.metode,olah:r.olah,panen:r.panen,ket:r.ket};
+        if(isKab){if(kecSel.value!==editing.KECAMATAN)f.kecamatan=kecSel.value;if(tgl.value!==editing.TANGGAL)f.tanggal=tgl.value;}
+        await SimonAPI.call('ltt.update',{id:editing.ID,expectedVersion:editing.VERSI,fields:f});
+        U.toast('Perubahan berhasil disimpan');setTimeout(function(){location.href='data.html';},900);return;
+      }
+      var res=await SimonAPI.call('ltt.submit',{idPengiriman:idPeng,pelapor:pel,kecamatan:kecSel.value,tanggal:tgl.value,rows:rows});
+      U.toast(res.duplikat?'Data ini sudah tersimpan sebelumnya (tidak digandakan).':'Berhasil disimpan: '+res.jumlah+' baris');
+      idPeng=SimonAPI.newId();box.innerHTML='<div class="empty" id="emptyDesa">Belum ada desa ditambahkan.<br>Klik tombol di bawah untuk mulai.</div>';desaN=0;hitung();
+    }catch(e){U.toast(U.errMsg(e),true);}
+    finally{U.busy(btn,false);if(closed)btn.disabled=true;}
+  };
+  tick();
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

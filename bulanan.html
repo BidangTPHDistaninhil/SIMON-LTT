@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laporan Bulanan · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="bulanan" data-title="Laporan Bulanan" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="state"></div>
+<div class="card"><div class="filters">
+<div><label for="fTahun">Tahun</label><select id="fTahun"><option value="">Semua Tahun</option></select></div>
+<div><label for="fBulan">Bulan</label><select id="fBulan"><option value="">Semua Bulan</option></select></div>
+<div><label for="fKec">Kecamatan</label><select id="fKec"></select></div>
+<div><label for="fDesa">Desa/Kelurahan</label><select id="fDesa"><option value="">Semua Desa</option></select></div>
+<div><label for="fJenis">Jenis LTT</label><select id="fJenis"><option value="">Semua Jenis</option></select></div>
+<div><label for="fAwal">Tanggal awal</label><input type="date" id="fAwal"></div>
+<div><label for="fAkhir">Tanggal akhir</label><input type="date" id="fAkhir"></div>
+<div class="fix"><button class="btn ghost" id="btnReset">Reset filter</button></div></div></div>
+<div class="kpis" id="kpis"></div>
+<div id="notices"></div>
+<div class="grid g2"><div class="card"><h2><span class="bar"></span><span id="chartTitle">LTT per Kecamatan (Ha)</span></h2><div class="chart-box"><canvas id="chart"></canvas></div></div>
+<div class="card"><h2><span class="bar"></span>Tampilan &amp; Pencarian</h2>
+<div class="seg" id="views"><button data-v="desa" class="on">Per Desa</button><button data-v="kecamatan">Per Kecamatan</button><button data-v="minggu">Per Minggu</button></div>
+<label for="q" style="margin-top:14px">Cari kecamatan / desa / jenis</label><input id="q" placeholder="Ketik untuk mencari…">
+<div class="toolbar" style="margin-top:14px"><span class="badge" id="found"></span><span class="sp"></span><span class="dl"><button class="btn sm" data-export="xlsx">⬇ Excel</button><button class="btn sm" data-export="pdf">⬇ PDF</button><button class="btn sm" data-export="csv">⬇ CSV</button></span></div></div></div>
+<div class="card"><div class="table-wrap"><table id="mainTable"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></div>
+<script>
+SimonShell.ready(function(me){
+  var R=SimonReport,U=SimonUI,raw=[],ref=null,view='desa',sort={key:'kecamatan',dir:'asc'},grouped=[],filtered=[],isKec=me.role==='PETUGAS_KECAMATAN',shown=[],hasOlah=false,hasPanen=false;
+  var HEAD={desa:[['no','No'],['kecamatan','Kecamatan'],['desa','Desa/Kelurahan'],['jenis','Jenis LTT'],['ltt','Luas Tambah Tanam (Ha)'],['olah','Olah Lahan (Ha)'],['panen','Luas Panen (Ha)']],
+    kecamatan:[['no','No'],['kecamatan','Kecamatan'],['jenis','Jenis LTT'],['ltt','Luas Tambah Tanam (Ha)'],['olah','Olah Lahan (Ha)'],['panen','Luas Panen (Ha)']],
+    minggu:[['no','No'],['kecamatan','Kecamatan'],['jenis','Jenis LTT'],['w1','Minggu 1 (Ha)'],['w2','Minggu 2 (Ha)'],['w3','Minggu 3 (Ha)'],['w4','Minggu 4 (Ha)'],['total','Total LTT (Ha)']]};
+  function init(){
+    var ys={};raw.forEach(function(d){if(/^\d{4}$/.test(d.thn))ys[d.thn]=1;});
+    fTahun.innerHTML=U.opt('','Semua Tahun')+Object.keys(ys).sort().reverse().map(function(y){return U.opt(y,y);}).join('');
+    fBulan.innerHTML=U.opt('','Semua Bulan')+U.BULAN.map(function(b,i){return U.opt(('0'+(i+1)).slice(-2),b);}).join('');
+    var kecs=isKec?[me.kecamatan]:ref.semuaKecamatan;
+    fKec.innerHTML=(isKec?'':U.opt('','Semua Kecamatan'))+kecs.map(function(k){return U.opt(k,k);}).join('');if(isKec){fKec.value=me.kecamatan;fKec.disabled=true;}
+    var js={};ref.jenisLtt.forEach(function(j){js[j.v]=1;});raw.forEach(function(d){if(d.jenis)js[d.jenis]=1;});
+    fJenis.innerHTML=U.opt('','Semua Jenis')+Object.keys(js).sort().map(function(j){return U.opt(j,R.jenisLabel(j));}).join('');
+    refreshDesa();
+    [fTahun,fBulan,fDesa,fJenis,fAwal,fAkhir].forEach(function(e){e.onchange=render;});
+    fKec.onchange=function(){refreshDesa();render();};
+    q.oninput=renderTable;
+    btnReset.onclick=function(){fTahun.value='';fBulan.value='';if(!isKec)fKec.value='';refreshDesa();fDesa.value='';fJenis.value='';fAwal.value='';fAkhir.value='';q.value='';render();};
+    views.onclick=function(e){var v=e.target.getAttribute('data-v');if(!v)return;view=v;sort={key:'kecamatan',dir:'asc'};[].forEach.call(views.children,function(b){b.classList.toggle('on',b===e.target);});render();};
+    thead.onclick=function(e){var th=e.target.closest('th[data-k]');if(!th||th.dataset.k==='no')return;var k=th.dataset.k;if(sort.key===k)sort.dir=sort.dir==='asc'?'desc':'asc';else{sort.key=k;sort.dir='asc';}renderTable();};
+  }
+  function refreshDesa(){
+    var cur=fDesa.value,k=fKec.value,s={};raw.forEach(function(d){if(k&&d.kec!==k)return;if(d.desa)s[d.desa]=1;});
+    fDesa.innerHTML=U.opt('','Semua Desa')+Object.keys(s).sort().map(function(d){return U.opt(d,d);}).join('');if(s[cur])fDesa.value=cur;
+  }
+  function getFiltered(){
+    var tahun=fTahun.value,bulan=fBulan.value,kec=fKec.value,desa=fDesa.value,jenis=fJenis.value,awal=fAwal.value,akhir=fAkhir.value;
+    return raw.filter(function(x){
+      if(tahun&&x.thn!==tahun)return false;if(bulan&&x.bln!==bulan)return false;if(kec&&x.kec!==kec)return false;if(desa&&x.desa!==desa)return false;if(jenis&&x.jenis!==jenis)return false;
+            if((awal||akhir)&&!x.tgl)return false;
+      if(awal&&x.tgl<awal)return false;
+      if(akhir&&x.tgl>akhir)return false;
+      return true;
+    });
+  }
+  function computeGrouped(data){
+    var map={};hasOlah=false;hasPanen=false;
+    data.forEach(function(r){
+      var kec=r.kec||'(Tanpa Kecamatan)',desa=r.desa||'(Tanpa Desa)',jenis=r.jenis||'(Tanpa Jenis)';
+      var key=(view==='desa'?kec+'|||'+desa:kec)+'|||'+jenis;
+      if(!map[key])map[key]={kecamatan:kec,desa:view==='desa'?desa:'',jenis:jenis,ltt:0,olah:0,panen:0};
+      map[key].ltt+=r.luas;if(r.hasOlah){hasOlah=true;map[key].olah+=r.olah;}if(r.hasPanen){hasPanen=true;map[key].panen+=r.panen;}
+    });
+    return Object.keys(map).map(function(k){return map[k];});
+  }
+  function computeMinggu(data){
+    var map={};
+    data.forEach(function(r){var w=R.weekOfMonth(r.tgl);if(!w)return;var kec=r.kec||'(Tanpa Kecamatan)',jenis=r.jenis||'(Tanpa Jenis)',key=kec+'|||'+jenis;
+      if(!map[key])map[key]={kecamatan:kec,jenis:jenis,w1:0,w2:0,w3:0,w4:0};map[key]['w'+w]+=r.luas;});
+    return Object.keys(map).map(function(k){var r=map[k];r.total=r.w1+r.w2+r.w3+r.w4;return r;});
+  }
+    function render(){
+    filtered=getFiltered();
+    grouped=view==='minggu'?computeMinggu(filtered):computeGrouped(filtered);
+
+    // Rekap mingguan wajib menggunakan satu tahun dan satu bulan.
+    if(view==='minggu' && !(fTahun.value && fBulan.value)){
+      grouped=[];
+    }
+    var tahun=fTahun.value,bulan=fBulan.value,per='Semua Periode';
+    if(tahun&&bulan)per=R.bulanLabel(bulan,tahun);else if(tahun)per='Tahun '+tahun;else if(bulan)per=R.bulanLabel(bulan);
+    var tl=0,to=0,tp=0,kc={},dc={};
+    filtered.forEach(function(r){tl+=r.luas;to+=r.olah;tp+=r.panen;if(r.kec)kc[r.kec]=1;if(r.desa)dc[r.kec+'|'+r.desa]=1;});
+    kpis.innerHTML=[['Periode',per,'gold'],['Total LTT',U.fmt(tl)+' <small>Ha</small>','em'],['Olah Lahan',U.fmt(to)+' <small>Ha</small>','blue'],['Luas Panen',U.fmt(tp)+' <small>Ha</small>','gold'],['Kecamatan',Object.keys(kc).length,''],['Desa/Kelurahan',Object.keys(dc).length,'']].map(function(k){return '<div class="kpi '+k[2]+'"><div class="l">'+k[0]+'</div><div class="v" style="font-size:'+(k[0]==='Periode'?'18':'22')+'px">'+k[1]+'</div></div>';}).join('');
+    var n='';var miss=[];if(!hasOlah&&view!=='minggu')miss.push('Olah Lahan');if(!hasPanen&&view!=='minggu')miss.push('Luas Panen');
+    if(!filtered.some(function(r){return r.hasOlah;}))n+='<div class="notice">ℹ️ Kolom Olah Lahan belum tersedia pada sumber data.</div>';
+    if(!filtered.some(function(r){return r.hasPanen;}))n+='<div class="notice">ℹ️ Kolom Luas Panen belum tersedia pada sumber data.</div>';
+    if(view==='minggu'&&!(tahun&&bulan))n+='<div class="notice">⚠️ Pilih <b>Tahun</b> dan <b>Bulan</b> agar pembagian Minggu 1–4 mengacu pada satu bulan yang sama.</div>';
+    notices.innerHTML=n;
+    // grafik
+    if(view==='minggu'){chartTitle.textContent='LTT per Minggu (Ha)';var w=[0,0,0,0];grouped.forEach(function(r){w[0]+=r.w1;w[1]+=r.w2;w[2]+=r.w3;w[3]+=r.w4;});R.chart('chart',R.barCfg(['Minggu 1','Minggu 2','Minggu 3','Minggu 4'],[{label:'LTT (Ha)',data:w,color:'rgba(5,150,105,.85)',thick:60}])).catch(function(){});}
+    else{chartTitle.textContent='LTT per Kecamatan (Ha) — 10 teratas';var t=R.topN(R.sumBy(filtered,function(r){return r.kec||'(Tanpa Kecamatan)';},function(r){return r.luas;}),10);R.chart('chart',R.barCfg(t.map(function(x){return x[0];}),[{label:'LTT (Ha)',data:t.map(function(x){return x[1];}),color:'rgba(5,150,105,.85)'}])).catch(function(){});}
+    thead.innerHTML='<tr>'+HEAD[view].map(function(h){return '<th class="'+(h[0]==='no'?'':'sortable')+(/^(ltt|olah|panen|w\d|total)$/.test(h[0])?' num':'')+'" data-k="'+h[0]+'">'+h[1]+(h[0]==='no'?'':' ↕')+'</th>';}).join('')+'</tr>';
+    renderTable();
+  }
+  function renderTable(){
+    var qq=(q.value||'').toLowerCase().trim();
+    var rows=grouped.filter(function(r){if(!qq)return true;return (r.kecamatan||'').toLowerCase().indexOf(qq)!==-1||(r.desa||'').toLowerCase().indexOf(qq)!==-1||(r.jenis||'').toLowerCase().indexOf(qq)!==-1||R.jenisLabel(r.jenis).toLowerCase().indexOf(qq)!==-1;});
+    rows.sort(function(a,b){var va=a[sort.key],vb=b[sort.key];if(va===undefined)va=a.kecamatan;if(vb===undefined)vb=b.kecamatan;if(typeof va==='string'){va=va.toLowerCase();vb=String(vb||'').toLowerCase();}return va<vb?(sort.dir==='asc'?-1:1):va>vb?(sort.dir==='asc'?1:-1):0;});
+    shown=rows;found.textContent=rows.length+' data';
+    var cols=HEAD[view].length;
+    if(!rows.length){
+      var pesan = view==='minggu' && !(fTahun.value && fBulan.value)
+        ? 'Pilih Tahun dan Bulan terlebih dahulu untuk menampilkan rekap mingguan.'
+        : 'Tidak ada data yang cocok dengan filter/pencarian saat ini.';
+
+      tbody.innerHTML='<tr><td colspan="'+cols+'" class="empty">'+U.esc(pesan)+'</td></tr>';
+      return;
+    }
+    var f=function(v){return U.fmt(v);},html='',t={ltt:0,olah:0,panen:0,w1:0,w2:0,w3:0,w4:0,total:0};
+    rows.forEach(function(r,i){
+      if(view==='minggu'){['w1','w2','w3','w4','total'].forEach(function(k){t[k]+=r[k];});html+='<tr><td>'+(i+1)+'</td><td>'+U.esc(r.kecamatan)+'</td><td>'+U.esc(R.jenisLabel(r.jenis))+'</td><td class="num mono">'+f(r.w1)+'</td><td class="num mono">'+f(r.w2)+'</td><td class="num mono">'+f(r.w3)+'</td><td class="num mono">'+f(r.w4)+'</td><td class="num mono"><b>'+f(r.total)+'</b></td></tr>';}
+      else{t.ltt+=r.ltt;t.olah+=r.olah;t.panen+=r.panen;html+='<tr><td>'+(i+1)+'</td><td>'+U.esc(r.kecamatan)+'</td>'+(view==='desa'?'<td>'+U.esc(r.desa)+'</td>':'')+'<td>'+U.esc(R.jenisLabel(r.jenis))+'</td><td class="num mono"><b>'+f(r.ltt)+'</b></td><td class="num mono">'+f(r.olah)+'</td><td class="num mono">'+f(r.panen)+'</td></tr>';}
+    });
+    if(view==='minggu')html+='<tr class="total"><td colspan="3">TOTAL KESELURUHAN</td><td class="num mono">'+f(t.w1)+'</td><td class="num mono">'+f(t.w2)+'</td><td class="num mono">'+f(t.w3)+'</td><td class="num mono">'+f(t.w4)+'</td><td class="num mono">'+f(t.total)+'</td></tr>';
+    else html+='<tr class="total"><td colspan="'+(view==='desa'?4:3)+'">TOTAL KESELURUHAN</td><td class="num mono">'+f(t.ltt)+'</td><td class="num mono">'+f(t.olah)+'</td><td class="num mono">'+f(t.panen)+'</td></tr>';
+    tbody.innerHTML=html;
+  }
+  R.wireExport(function(){
+    var per=document.querySelector('.kpi .v').textContent.trim();
+    var head=HEAD[view].map(function(h){return h[1];}),body=[],foot,num;
+    var t={ltt:0,olah:0,panen:0,w1:0,w2:0,w3:0,w4:0,total:0};
+    shown.forEach(function(r,i){
+      if(view==='minggu'){['w1','w2','w3','w4','total'].forEach(function(k){t[k]+=r[k];});body.push([i+1,r.kecamatan,R.jenisLabel(r.jenis),r.w1,r.w2,r.w3,r.w4,r.total]);}
+      else{t.ltt+=r.ltt;t.olah+=r.olah;t.panen+=r.panen;body.push(view==='desa'?[i+1,r.kecamatan,r.desa,R.jenisLabel(r.jenis),r.ltt,r.olah,r.panen]:[i+1,r.kecamatan,R.jenisLabel(r.jenis),r.ltt,r.olah,r.panen]);}
+    });
+    if(view==='minggu'){foot=['','TOTAL KESELURUHAN','',t.w1,t.w2,t.w3,t.w4,t.total];num=[3,4,5,6,7];}
+    else if(view==='desa'){foot=['','TOTAL KESELURUHAN','','',t.ltt,t.olah,t.panen];num=[4,5,6];}
+    else{foot=['','TOTAL KESELURUHAN','',t.ltt,t.olah,t.panen];num=[3,4,5];}
+    return {title:'LAPORAN BULANAN INDUK - DINAS PERTANIAN',subtitle:'Kabupaten Indragiri Hilir | Periode: '+per+(view==='minggu'?' | Rekap Mingguan (Minggu 1-4)':''),head:head,body:body,foot:foot,numCols:num,
+      file:'Lap_Bulanan_TPH-DISTAN-INHIL_'+per.replace(/\s+/g,'_')+(view==='minggu'?'_Mingguan':''),sheet:'Laporan Bulanan'};
+  });
+  R.boot(async function(){var d=await R.load();raw=d.rows;ref=d.ref;init();render();});
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

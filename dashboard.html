@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="dashboard" data-title="Dashboard" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div class="card"><div class="row"><div><h2 style="margin:0"><span class="bar"></span>Ringkasan</h2><div class="sub" id="ctx" style="color:var(--muted)"></div></div><div class="fix" style="min-width:160px"><label for="fth" style="margin-top:0">Periode</label><select id="fth"></select></div></div></div>
+<div class="grid g4" id="kpi"></div>
+<div class="grid g2" style="margin-top:18px"><div class="card"><h2><span class="bar"></span>Peringkat Kecamatan (LTT)</h2><div class="bars" id="rank"></div></div>
+<div class="card" id="belumCard"><h2><span class="bar"></span>Kecamatan Belum Input Hari Ini</h2><div id="belum"></div></div></div>
+<div class="card"><h2><span class="bar"></span>Laporan dan analisis</h2><div class="grid g4 linkcards">
+<a href="tampilltt.html">Dashboard Besar<small>Harian, capaian, bulanan, panen</small></a>
+<a href="harian.html">Laporan Harian<small>Rekap per jenis dan Top 10</small></a>
+<a href="bulanan.html">Laporan Bulanan<small>Per desa, kecamatan, minggu</small></a>
+<a href="capaian.html">Capaian Target<small>Target vs realisasi</small></a></div></div>
+<script>
+SimonShell.ready(async function(me){
+  var U=SimonUI,rows=[];
+  ctx.textContent=me.role==='PETUGAS_KECAMATAN'?'Data kecamatan '+me.kecamatan:'Seluruh kecamatan Kabupaten Indragiri Hilir';
+  if(me.role==='PETUGAS_KECAMATAN')document.getElementById('belumCard').style.display='none';
+  document.getElementById('kpi').innerHTML='<div class="kpi skeleton" style="height:84px"></div>'.repeat(4);
+  try{rows=await SimonAPI.call('legacy.data');}catch(e){U.toast(U.errMsg(e),true);return;}
+  var today=me.serverDate,yr=today.slice(0,4),years={};years[yr]=1;
+  rows.forEach(function(o){var y=String(o.TANGGAL||'').slice(0,4);if(/^\d{4}$/.test(y))years[y]=1;});
+  fth.innerHTML=Object.keys(years).sort().reverse().map(function(y){return U.opt(y,'Tahun '+y,y===yr);}).join('')+U.opt('all','Semua data');
+  function olah(o){return o['OLAH LAHAN']!==undefined?o['OLAH LAHAN']:o['LUAS OLAH LAHAN'];}
+  function render(){
+    var v=fth.value,ltt=0,ol=0,pn=0,td=0,kec={},sudah={};
+    rows.forEach(function(o){
+      if(String(o.TANGGAL)===today&&o.KECAMATAN)sudah[o.KECAMATAN]=1;
+      if(v!=='all'&&String(o.TANGGAL||'').slice(0,4)!==v)return;
+      var l=U.num(o['LUAS TAMBAH TANAM']);ltt+=l;ol+=U.num(olah(o));pn+=U.num(o['LUAS PANEN']);
+      if(String(o.TANGGAL)===today)td+=l;
+      if(o.KECAMATAN)kec[o.KECAMATAN]=(kec[o.KECAMATAN]||0)+l;});
+    var rasio=ltt?pn/ltt*100:0;
+    document.getElementById('kpi').innerHTML=
+      '<div class="kpi em"><div class="l">Total LTT</div><div class="v">'+U.fmt(ltt)+' <small>Ha</small></div></div>'+
+      '<div class="kpi gold"><div class="l">LTT Hari Ini</div><div class="v">'+U.fmt(td)+' <small>Ha</small></div></div>'+
+      '<div class="kpi"><div class="l">Olah Lahan</div><div class="v">'+U.fmt(ol)+' <small>Ha</small></div></div>'+
+      '<div class="kpi"><div class="l">Luas Panen · rasio '+rasio.toFixed(1)+'%</div><div class="v">'+U.fmt(pn)+' <small>Ha</small></div></div>';
+    var top=Object.keys(kec).map(function(k){return[k,kec[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,10),mx=top.length?top[0][1]:1;
+    rank.innerHTML=top.length?top.map(function(t,i){return '<div class="b"><span class="n">'+(i+1)+'. '+U.esc(t[0])+'</span><span class="t"><i style="width:'+(mx?t[1]/mx*100:0)+'%"></i></span><span class="v">'+U.fmt(t[1])+' Ha</span></div>';}).join(''):'<div class="empty">Belum ada data.</div>';
+    return sudah;
+  }
+  var ref;
+try {
+  ref = await SimonAPI.call('ref.get');
+} catch(e) {
+  U.toast('Gagal memuat referensi kecamatan: ' + U.errMsg(e), true);
+  belum.innerHTML = '<div class="empty">Referensi kecamatan tidak dapat dimuat.</div>';
+  return;
+}
+  function all(){var sudah=render();if(me.role==='PETUGAS_KECAMATAN')return;var sudahNorm = {};
+Object.keys(sudah).forEach(function(k) {
+  sudahNorm[String(k).trim().toUpperCase()] = 1;
+});
+
+var bl = ref.semuaKecamatan.filter(function(k) {
+  return !sudahNorm[String(k).trim().toUpperCase()];
+});
+    belum.innerHTML=bl.length?bl.map(function(k){return '<span class="chip warn" style="margin:3px">📍 '+U.esc(k)+'</span>';}).join(''):'<div class="banner" style="background:var(--emerald-soft);color:var(--emerald-d);margin:0">Semua kecamatan sudah input hari ini.</div>';}
+  fth.onchange=all;all();
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

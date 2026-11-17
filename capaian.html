@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capaian Target · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="capaian" data-title="Capaian Target" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="state"></div>
+<div class="card"><div class="toolbar">
+<div class="seg" id="mode"><button data-m="bulanan" class="on">📅 Bulanan</button><button data-m="tahunan">📆 Tahunan</button></div>
+<div id="boxBulan"><label for="fBulan" style="margin:0 0 3px">Bulan</label><input type="month" id="fBulan"></div>
+<div id="boxTahun" style="display:none"><label for="fTahun" style="margin:0 0 3px">Tahun</label><select id="fTahun"></select></div>
+<span class="sp"></span><span class="dl"><button class="btn sm" data-export="xlsx">⬇ Excel</button><button class="btn sm" data-export="pdf">⬇ PDF</button><button class="btn sm" data-export="csv">⬇ CSV</button></span></div><div class="sub" id="ctx" style="margin-top:8px"></div></div>
+<div class="grid g2">
+<div class="card"><h2><span class="bar"></span>Capaian Kabupaten</h2>
+<div class="gauge"><svg viewBox="0 0 140 140" role="img" aria-label="Persentase capaian"><circle cx="70" cy="70" r="58" fill="none" stroke="#e6efe9" stroke-width="13"/><circle id="gFill" cx="70" cy="70" r="58" fill="none" stroke="#15803d" stroke-width="13" stroke-linecap="round" transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1),stroke .4s"/><text x="70" y="70" text-anchor="middle" class="gv" id="gTxt">0%</text><text x="70" y="88" text-anchor="middle" class="gl">realisasi/target</text></svg>
+<div style="flex:1;min-width:200px"><div class="sub" id="gDesc"></div><div style="margin-top:8px"><span class="badge" id="gStatus"></span> <span class="badge ok" id="gOver" style="display:none">🏆 Melampaui target</span></div></div></div></div>
+<div class="kpis" style="grid-template-columns:repeat(2,1fr);margin:0" id="kpis"></div></div>
+<div class="card" style="margin-top:18px"><h2><span class="bar"></span>Target vs Realisasi per Kecamatan (Ha)</h2><div class="chart-box tall"><canvas id="chart"></canvas></div></div>
+<div class="card"><h2><span class="bar"></span>Capaian per Kecamatan <span class="badge" id="jml"></span></h2><div id="list"></div></div>
+<script>
+SimonShell.ready(function(me){
+  var gFill=document.getElementById('gFill'),gTxt=document.getElementById('gTxt');
+  var R=SimonReport,U=SimonUI,real=[],target=[],mode='bulanan',C=2*Math.PI*58,last=null,isKec=me.role==='PETUGAS_KECAMATAN';
+  function monthOf(t){return t?t.slice(0,7):'';}
+  function bulanNum(b){var s=String(b===undefined||b===null?'':b).trim().toUpperCase();if(/^\d{1,2}$/.test(s))return ('0'+s).slice(-2);return R.MONTH_NUM[s]||'';}
+  function tNum(v){return U.num(v);}
+  function init(){
+    var ys={};real.forEach(function(d){if(d.thn)ys[d.thn]=1;});target.forEach(function(d){if(d.TAHUN)ys[String(d.TAHUN)]=1;});var cy=me.serverDate.slice(0,4);ys[cy]=1;
+    var sorted=Object.keys(ys).sort(function(a,b){return b-a;});
+    fTahun.innerHTML=sorted.map(function(y){return U.opt(y,y+(y===cy?' (Tahun berjalan)':''));}).join('');fTahun.value=cy;
+    var months=real.map(function(d){return monthOf(d.tgl);}).filter(Boolean).sort();fBulan.value=months.length?months[months.length-1]:me.serverDate.slice(0,7);
+    fBulan.onchange=render;fTahun.onchange=render;
+    mode_.onclick=function(e){var m=e.target.getAttribute('data-m');if(!m)return;mode=m;[].forEach.call(mode_.children,function(b){b.classList.toggle('on',b===e.target);});boxBulan.style.display=m==='bulanan'?'':'none';boxTahun.style.display=m==='tahunan'?'':'none';render();};
+    ctx.textContent=isKec?'Menampilkan kecamatan '+me.kecamatan+' (sesuai hak akses Anda).':'Seluruh kecamatan Kabupaten Indragiri Hilir.';
+  }
+  var mode_=document.getElementById('mode');
+  function periodeLabel(){if(mode==='bulanan'){var p=fBulan.value.split('-');return R.bulanLabel(p[1],p[0]);}return 'Tahun '+fTahun.value;}
+  function render(){
+    var realMap={},targetMap={},sel=mode==='bulanan'?fBulan.value:fTahun.value;
+    if(!sel){
+  last=null;
+  list.innerHTML='<div class="empty">Tidak ada data</div>';
+  kpis.innerHTML='';
+  jml.textContent='0 kecamatan';
+  gTxt.textContent='0%';
+  gDesc.textContent='Pilih periode untuk melihat capaian.';
+  gFill.style.strokeDashoffset=C;
+  gStatus.textContent='Belum ada data';
+  gOver.style.display='none';
+  return;
+}
+    if(mode==='bulanan'){
+      real.filter(function(d){return monthOf(d.tgl)===sel;}).forEach(function(d){var k=(d.kec||'').toUpperCase();realMap[k]=(realMap[k]||0)+d.luas;});
+      target.forEach(function(d){if(String(d.TAHUN)+'-'+bulanNum(d.BULAN)===sel){var k=String(d.KECAMATAN||'').toUpperCase();targetMap[k]=(targetMap[k]||0)+tNum(d.TARGET);}});
+    }else{
+      real.filter(function(d){return d.thn===String(sel);}).forEach(function(d){var k=(d.kec||'').toUpperCase();realMap[k]=(realMap[k]||0)+d.luas;});
+      target.filter(function(d){return String(d.TAHUN)===String(sel);}).forEach(function(d){var k=String(d.KECAMATAN||'').toUpperCase();targetMap[k]=(targetMap[k]||0)+tNum(d.TARGET);});
+    }
+    var tR=0,tT=0;Object.keys(realMap).forEach(function(k){tR+=realMap[k];});Object.keys(targetMap).forEach(function(k){tT+=targetMap[k];});
+    var p=tT?tR/tT*100:0,st=R.statusColor(p),sisa=Math.max(0,tT-tR);
+    gDesc.textContent=mode==='bulanan'?'Realisasi tanam dibandingkan target pada bulan terpilih ('+periodeLabel()+').':'Realisasi tanam dibandingkan target sepanjang '+periodeLabel().toLowerCase()+'.';
+    var clamped=Math.max(0,Math.min(p,100));
+    gFill.style.strokeDasharray=C;gFill.style.strokeDashoffset=C-clamped/100*C;gFill.style.stroke=st.solid;gFill.style.filter='drop-shadow(0 0 6px '+st.glow+')';
+    gTxt.textContent=p.toFixed(1)+'%';gStatus.textContent=st.label;gStatus.style.background=st.solid+'22';gStatus.style.color='#12241a';gOver.style.display=p>100?'':'none';
+    kpis.innerHTML=[['Target',U.fmt(tT)+' <small>Ha</small>','gold'],['Realisasi',U.fmt(tR)+' <small>Ha</small>','em'],['Sisa Target',U.fmt(sisa)+' <small>Ha</small>','warn'],['Persentase',p.toFixed(1)+'<small>%</small>','']].map(function(k){return '<div class="kpi '+k[2]+'"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>';}).join('');
+    var keys=Object.keys(Object.assign({},targetMap,realMap)).sort(),labels=[],td=[],rd=[],rows=[];
+    jml.textContent=keys.length+' kecamatan';
+    list.innerHTML=keys.length?keys.map(function(k){
+      var r=realMap[k]||0,t=targetMap[k]||0,pp=t?r/t*100:0,s=R.statusColor(pp);labels.push(k);td.push(t);rd.push(r);rows.push([k,t,r,pp,Math.max(0,t-r),s.label]);
+      return '<div class="prog"><div class="top"><span>'+U.esc(k)+'</span><span><b>'+U.fmt(r)+'</b> / '+U.fmt(t)+' Ha</span></div><div class="tr"><i style="width:'+Math.min(pp,100)+'%;background:'+s.solid+';box-shadow:0 0 8px '+s.glow+'"></i></div><span class="pc" style="color:'+s.solid+'">'+pp.toFixed(1)+'% · '+s.label+'</span></div>';}).join(''):'<div class="empty">Belum ada target maupun realisasi pada periode ini.</div>';
+    last={rows:rows,tT:tT,tR:tR,p:p,sisa:sisa};
+    R.chart('chart',R.barCfg(labels,[{label:'Target',data:td,color:'rgba(234,179,8,.85)',thick:22},{label:'Realisasi',data:rd,color:'rgba(16,185,129,.9)',thick:22}])).catch(function(e){U.toast(U.errMsg(e),true);});
+  }
+  R.wireExport(function(){
+    if(!last||!last.rows.length)return null;
+    return {title:'Laporan Capaian Target Tanam',subtitle:'Kabupaten Indragiri Hilir | Periode: '+periodeLabel()+' | '+(mode==='bulanan'?'Bulanan':'Tahunan')+(isKec?' | '+me.kecamatan:''),
+      head:['Kecamatan','Target (Ha)','Realisasi (Ha)','Capaian (%)','Sisa Target (Ha)','Status'],body:last.rows,foot:['TOTAL',last.tT,last.tR,last.p,last.sisa,R.statusColor(last.p).label],numCols:[1,2,3,4],
+      file:'Capaian_Target_'+periodeLabel().replace(/\s+/g,'_'),sheet:'Capaian Target',landscape:false};
+  });
+  R.boot(async function(){var d=await R.load({target:true});real=d.rows;target=d.target;init();render();});
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

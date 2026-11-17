@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Aktivitas · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="log" data-title="Log Aktivitas" data-roles="ADMIN,PETUGAS_KABUPATEN,PETUGAS_KECAMATAN">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div class="card"><div class="row"><div><label for="lim">Tampilkan</label><select id="lim"><option value="100">100 terakhir</option><option value="200">200 terakhir</option><option value="500">500 terakhir</option></select></div><div class="fix"><button class="btn ghost" id="btnRef">Muat ulang</button></div></div></div>
+<div class="card"><div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Username</th><th>Peran</th><th>Kecamatan</th><th>Aktivitas</th><th>ID</th><th>Keterangan</th><th></th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<script>
+SimonShell.ready(function(){
+  var U = SimonUI;
+var rows = [];
+var lim = document.getElementById('lim');
+var btnRef = document.getElementById('btnRef');
+  
+async function load(){
+  document.getElementById('tb').innerHTML='<tr><td colspan="8" class="empty">Memuat…</td></tr>';
+
+  try {
+    rows = (await SimonAPI.call('log.list', {limit: +lim.value})).rows || [];
+  } catch(e) {
+    U.toast(U.errMsg(e), true);
+    document.getElementById('tb').innerHTML='<tr><td colspan="8" class="empty">Gagal memuat log aktivitas.</td></tr>';
+    return;
+  }
+
+  document.getElementById('tb').innerHTML = rows.length
+    ? rows.map(function(r, i) {
+        return '<tr>' +
+          '<td>'+U.esc(r.WAKTU)+'</td>' +
+          '<td>'+U.esc(r.USERNAME)+'</td>' +
+          '<td>'+U.esc(r.PERAN)+'</td>' +
+          '<td>'+U.esc(r.KECAMATAN)+'</td>' +
+          '<td><span class="chip">'+U.esc(r.AKTIVITAS)+'</span></td>' +
+          '<td>'+U.esc(r.ID)+'</td>' +
+          '<td>'+U.esc(r.KETERANGAN)+'</td>' +
+          '<td>'+((r.DATA_SEBELUM || r.DATA_SESUDAH)
+            ? '<button class="btn ghost sm" data-i="'+i+'">Detail</button>'
+            : '')+'</td>' +
+        '</tr>';
+      }).join('')
+    : '<tr><td colspan="8" class="empty">Belum ada aktivitas.</td></tr>';
+}
+
+  document.getElementById('tb').onclick=function(e){var i=e.target.getAttribute('data-i');if(i===null)return;var r=rows[i];var d=document.createElement('dialog');d.className='wide';d.innerHTML='<h3>'+U.esc(r.AKTIVITAS)+' · '+U.esc(r.WAKTU)+'</h3><p>Sebelum:</p><pre style="white-space:pre-wrap;word-break:break-word;background:#f1f6f3;padding:10px;border-radius:8px;max-height:30vh;overflow:auto">'+U.esc(r.DATA_SEBELUM||'-')+'</pre><p>Sesudah:</p><pre style="white-space:pre-wrap;word-break:break-word;background:#f1f6f3;padding:10px;border-radius:8px;max-height:30vh;overflow:auto">'+U.esc(r.DATA_SESUDAH||'-')+'</pre><div class="acts"><button class="btn ghost">Tutup</button></div>';document.body.appendChild(d);d.querySelector('button').onclick=function(){d.close();d.remove();};d.showModal();};
+  lim.onchange=load;btnRef.onclick=load;load();
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

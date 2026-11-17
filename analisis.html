@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analisis Tanam & Panen · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="analisis" data-title="Analisis Tanam & Panen" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="state"></div>
+<div class="card"><div class="filters">
+<div><label for="fKec">Kecamatan</label><select id="fKec"></select></div>
+<div><label for="fTahun">Tahun</label><select id="fTahun"><option value="">Semua</option></select></div>
+<div><label for="fBulan">Bulan</label><select id="fBulan"><option value="">Semua</option></select></div>
+<div><label for="fDari">Dari</label><input type="date" id="fDari"></div>
+<div><label for="fSampai">Sampai</label><input type="date" id="fSampai"></div></div>
+<div class="toolbar" style="margin-top:12px"><div class="qf" id="qf"><button data-q="today">Hari Ini</button><button data-q="week">Minggu Ini</button><button data-q="month">Bulan Ini</button><button data-q="year">Tahun Ini</button><button data-q="all" class="on">Semua</button></div><span class="sp"></span><span class="badge" id="clock"></span></div></div>
+<div class="kpis" id="kpis"></div>
+<div class="grid g2">
+<div class="card"><h2><span class="bar"></span>LTT vs Panen per Kecamatan (Ha)</h2><div class="chart-box"><canvas id="cBar"></canvas></div></div>
+<div class="card"><h2><span class="bar" style="background:#3b82f6"></span>Tren Harian (Ha)</h2><div class="chart-box"><canvas id="cLine"></canvas></div></div></div>
+<div class="card"><div class="toolbar"><h2 style="margin:0"><span class="bar"></span>Ringkasan per Kecamatan</h2><span class="sp"></span><input id="kecSearch" placeholder="Cari kecamatan…" style="max-width:220px"></div>
+<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Kecamatan</th><th class="num">LTT (Ha)</th><th class="num">Panen (Ha)</th><th>Rasio / Status</th></tr></thead><tbody id="kecTb"></tbody></table></div></div>
+<div class="card"><div class="toolbar"><h2 style="margin:0"><span class="bar"></span>Detail Data</h2><span class="sp"></span><input id="detSearch" placeholder="Cari kecamatan / tanggal…" style="max-width:220px"><span class="dl"><button class="btn sm" data-export="xlsx">⬇ Excel</button><button class="btn sm" data-export="pdf">⬇ PDF</button><button class="btn sm" data-export="csv">⬇ CSV</button></span></div>
+<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th class="sortable" data-k="TANGGAL">Tanggal ↕</th><th class="sortable" data-k="KECAMATAN">Kecamatan ↕</th><th class="sortable num" data-k="LTT">LTT (Ha) ↕</th><th class="sortable num" data-k="PANEN">Panen (Ha) ↕</th><th class="sortable num" data-k="RASIO">Rasio ↕</th><th>Status</th></tr></thead><tbody id="detTb"></tbody></table></div>
+<div class="pager"><span id="pgInfo"></span><span class="pb" id="pgBtns"></span></div></div>
+<script>
+SimonShell.ready(function(me){
+  var R=SimonReport,U=SimonUI,raw=[],ref=null,f=[],isKec=me.role==='PETUGAS_KECAMATAN',PS=15,page=1,ds={key:'',dir:1},detRows=[];
+  function status(l,p){return p<l?['Defisit','bad']:['Surplus','ok'];}  // 'Baik' pada versi lama tidak pernah tercapai; hasil identik
+  function init(){
+    var kecs=isKec?[me.kecamatan]:ref.semuaKecamatan;
+    fKec.innerHTML=(isKec?'':U.opt('','Semua Kecamatan'))+kecs.map(function(k){return U.opt(k,k);}).join('');if(isKec){fKec.value=me.kecamatan;fKec.disabled=true;}
+    var ys={};
+raw.forEach(function(d){if(d.thn)ys[d.thn]=1;});
+ys[me.serverDate.slice(0,4)]=1;
+fTahun.innerHTML=U.opt('','Semua')+Object.keys(ys).sort().map(function(y){return U.opt(y,y);}).join('');
+    fBulan.innerHTML=U.opt('','Semua')+U.BULAN.map(function(b,i){return U.opt(('0'+(i+1)).slice(-2),b);}).join('');
+    [fKec,fTahun,fBulan,fDari,fSampai].forEach(function(e){e.onchange=function(){mark('');apply();};});
+    qf.onclick=function(e){var q=e.target.getAttribute('data-q');if(q)quick(q);};
+    kecSearch.oninput=renderKec;detSearch.oninput=function(){page=1;renderDet();};
+    document.querySelectorAll('th[data-k]').forEach(function(th){th.onclick=function(){var k=th.dataset.k;if(ds.key===k)ds.dir*=-1;else{ds.key=k;ds.dir=1;}page=1;renderDet();};});
+    pgBtns.onclick=function(e){var p=e.target.getAttribute('data-p');if(p){page=+p;renderDet();}};
+    var serverNow=SimonAPI.serverClock(me);
+    var tick=function(){
+  var n=serverNow();
+  clock.textContent=n.toLocaleDateString('id-ID',{
+    weekday:'short',day:'numeric',month:'short',year:'numeric',
+    timeZone:'Asia/Jakarta'
+  })+' · '+n.toLocaleTimeString('id-ID',{
+    hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'
+  })+' WIB';
+};
+
+tick();
+    setInterval(tick,30000);
+  }
+
+  function mark(q){[].forEach.call(qf.children,function(b){b.classList.toggle('on',b.getAttribute('data-q')===q);});}
+  
+function quick(type){
+  mark(type);
+
+  if(!isKec) fKec.value='';
+  fTahun.value='';
+  fBulan.value='';
+  fDari.value='';
+  fSampai.value='';
+
+  // Gunakan UTC agar tidak dipengaruhi zona waktu komputer.
+  var p=me.serverDate.split('-');
+  var now=new Date(Date.UTC(+p[0],+p[1]-1,+p[2]));
+
+  var pad=function(n){
+    return ('0'+n).slice(-2);
+  };
+
+  var iso=function(d){
+    return d.getUTCFullYear()+'-'+
+      pad(d.getUTCMonth()+1)+'-'+
+      pad(d.getUTCDate());
+  };
+
+  if(type==='today'){
+    fDari.value=iso(now);
+    fSampai.value=iso(now);
+  }
+  else if(type==='week'){
+    var s=new Date(now);
+    s.setUTCDate(now.getUTCDate()-((now.getUTCDay()+6)%7));
+    fDari.value=iso(s);
+    fSampai.value=iso(now);
+  }
+  else if(type==='month'){
+    fBulan.value=pad(now.getUTCMonth()+1);
+    fTahun.value=String(now.getUTCFullYear());
+  }
+  else if(type==='year'){
+    fTahun.value=String(now.getUTCFullYear());
+  }
+
+  apply();
+}
+
+  function apply(){
+    var kec=fKec.value,th=fTahun.value,bl=fBulan.value,da=fDari.value,sa=fSampai.value;page=1;
+    f=raw.filter(function(d){
+  if(kec&&d.kec!==kec)return false;
+
+  var adaFilterWaktu=!!(th||bl||da||sa);
+  if(adaFilterWaktu&&!d.tgl)return false;
+
+  if(th&&d.thn!==th)return false;
+  if(bl&&d.bln!==bl)return false;
+  if(da&&d.tgl<da)return false;
+  if(sa&&d.tgl>sa)return false;
+
+  return true;
+});
+    kpiRender();charts();renderKec();renderDet();
+  }
+  function kpiRender(){
+    var l=0,p=0;f.forEach(function(d){l+=d.luas;p+=d.panen;});var r=l?p/l*100:0;
+    kpis.innerHTML=[['Total LTT',U.fmt(l)+' <small>Ha</small>','em'],['Total Panen',U.fmt(p)+' <small>Ha</small>','gold'],['Selisih (LTT − Panen)',U.fmt(l-p)+' <small>Ha</small>','warn'],['Rasio Panen/LTT',r.toFixed(1)+'<small>%</small>','blue']].map(function(k){return '<div class="kpi '+k[2]+'"><div class="l">'+k[0]+'</div><div class="v">'+k[1]+'</div></div>';}).join('');
+  }
+  function kecMap(){var m={};f.forEach(function(d){var k=d.kec;if(!m[k])m[k]={ltt:0,panen:0};m[k].ltt+=d.luas;m[k].panen+=d.panen;});return m;}
+  function charts(){
+    var m=kecMap(),labels=Object.keys(m);
+    R.chart('cBar',R.barCfg(labels,[{label:'LTT',data:labels.map(function(k){return m[k].ltt;}),color:'rgba(5,150,105,.85)',thick:20},{label:'Panen',data:labels.map(function(k){return m[k].panen;}),color:'rgba(245,158,11,.9)',thick:20}])).catch(function(e){U.toast(U.errMsg(e),true);});
+    var by={};f.forEach(function(d){if(!d.tgl)return;if(!by[d.tgl])by[d.tgl]={ltt:0,panen:0};by[d.tgl].ltt+=d.luas;by[d.tgl].panen+=d.panen;});
+    var ks=Object.keys(by).sort();
+    R.chart('cLine',{type:'line',data:{labels:ks,datasets:[{label:'LTT',data:ks.map(function(k){return by[k].ltt;}),borderColor:'#059669',backgroundColor:'rgba(5,150,105,.15)',fill:true,tension:.3,pointRadius:2},{label:'Panen',data:ks.map(function(k){return by[k].panen;}),borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.12)',fill:true,tension:.3,pointRadius:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{usePointStyle:true,pointStyle:'circle'}}},scales:{y:{beginAtZero:true,grid:{color:'rgba(11,59,46,.07)'}},x:{grid:{display:false},ticks:{maxTicksLimit:10}}}}}).catch(function(){});
+  }
+  function renderKec(){
+    var m=kecMap(),q=(kecSearch.value||'').toLowerCase(),ks=Object.keys(m).filter(function(k){return k.toLowerCase().indexOf(q)!==-1;});
+    kecTb.innerHTML=ks.length?ks.map(function(k){var l=m[k].ltt,p=m[k].panen,r=l?p/l*100:0,s=status(l,p);return '<tr><td><b>'+U.esc(k)+'</b></td><td class="num mono">'+U.fmt(l)+'</td><td class="num mono">'+U.fmt(p)+'</td><td><span class="badge '+s[1]+'">'+s[0]+' · '+r.toFixed(0)+'%</span></td></tr>';}).join(''):'<tr><td colspan="4" class="empty">📭 Tidak ada data</td></tr>';
+  }
+  
+function getDet(){
+  var q=(detSearch.value||'').toLowerCase();
+  var rows=f.map(function(d){
+    return {
+      TANGGAL:d.tgl||'',
+      KECAMATAN:d.kec||'',
+      LTT:d.luas,
+      PANEN:d.panen,
+      RASIO:d.luas?d.panen/d.luas*100:0
+    };
+  }).filter(function(r){
+    return r.KECAMATAN.toLowerCase().indexOf(q)!==-1||
+           r.TANGGAL.toLowerCase().indexOf(q)!==-1;
+  });
+
+  if(ds.key)rows.sort(function(a,b){
+    var x=a[ds.key],y=b[ds.key];
+    if(typeof x==='string'){
+      x=x.toLowerCase();
+      y=String(y||'').toLowerCase();
+    }
+    return x<y?-ds.dir:x>y?ds.dir:0;
+  });
+
+  return rows;
+}
+
+  function renderDet(){
+    detRows=getDet();var pages=Math.max(1,Math.ceil(detRows.length/PS));if(page>pages)page=pages;var s=(page-1)*PS,sl=detRows.slice(s,s+PS);
+    detTb.innerHTML=sl.length?sl.map(function(r){var st=status(r.LTT,r.PANEN);return '<tr><td class="mono">'+U.esc(r.TANGGAL||'—')+'</td><td>'+U.esc(r.KECAMATAN)+'</td><td class="num mono">'+U.fmt(r.LTT)+'</td><td class="num mono">'+U.fmt(r.PANEN)+'</td><td class="num mono">'+r.RASIO.toFixed(1)+'%</td><td><span class="badge '+st[1]+'">'+st[0]+'</span></td></tr>';}).join(''):'<tr><td colspan="6" class="empty">📭 Data tidak ditemukan</td></tr>';
+    pgInfo.textContent=detRows.length?'Menampilkan '+(s+1)+'–'+Math.min(s+PS,detRows.length)+' dari '+detRows.length+' data':'';
+    var b='<button '+(page<=1?'disabled':'')+' data-p="'+(page-1)+'">‹ Prev</button><button class="on" disabled>'+page+' / '+pages+'</button><button '+(page>=pages?'disabled':'')+' data-p="'+(page+1)+'">Next ›</button>';pgBtns.innerHTML=b;
+  }
+  R.wireExport(function(){
+    var rows=getDet();if(!rows.length)return null;var tl=0,tp=0;
+    var body=rows.map(function(r){tl+=r.LTT;tp+=r.PANEN;return [r.TANGGAL,r.KECAMATAN,r.LTT,r.PANEN,r.RASIO,status(r.LTT,r.PANEN)[0]];});
+    return {title:'Analisis Tanam & Panen',subtitle:'Kabupaten Indragiri Hilir | '+
+  (fDari.value||fSampai.value
+    ?'Periode '+(fDari.value||'…')+' s/d '+(fSampai.value||'…')
+    :(fBulan.value
+      ?'Bulan '+U.BULAN[Number(fBulan.value)-1]+(fTahun.value?' '+fTahun.value:'')
+      :(fTahun.value?'Tahun '+fTahun.value:'Semua periode')
+    )
+  )+(fKec.value?' | '+fKec.value:''),
+      head:['Tanggal','Kecamatan','LTT (Ha)','Panen (Ha)','Rasio (%)','Status'],body:body,foot:['','TOTAL',tl,tp,tl?tp/tl*100:0,''],numCols:[2,3,4],file:'data-ltt-panen',sheet:'LTT vs Panen',landscape:false};
+  });
+  R.boot(async function(){var d=await R.load();raw=d.rows;ref=d.ref;init();apply();});
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>

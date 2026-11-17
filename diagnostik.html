@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Diagnostik · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1"></head>
+<body data-mode="public"><main style="max-width:760px;margin:30px auto">
+<div class="card"><h2><span class="bar"></span>Diagnostik pemasangan SIMON-LTT</h2>
+<p class="sub">Memeriksa apakah setiap berkas dapat dimuat dari alamat situs ini. Tidak mengirim data apa pun.</p>
+<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Berkas</th><th>Status</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div id="ext" style="margin-top:14px"></div><p style="margin-top:14px"><a href="index.html">← Ke halaman login</a></p></div></main>
+<script>
+(function(){
+  var V='?v=2.1';
+  var files=['assets/css/app.css','assets/js/config.js','assets/js/simon-ui.js','assets/js/simon-libs.js','assets/js/simon-api.js','assets/js/report-lib.js','assets/js/shell.js','index.html','dashboard.html','input.html','data.html','tampilltt.html','harian.html','bulanan.html','capaian.html','analisis.html','pengguna.html','log.html','pengaturan.html'];
+  var tb=document.getElementById('tb');
+  function row(n,ok,t){var tr=document.createElement('tr');var a=document.createElement('td'),b=document.createElement('td');a.textContent=n;b.innerHTML='<span class="badge '+(ok?'ok':'bad')+'">'+t+'</span>';tr.appendChild(a);tr.appendChild(b);tb.appendChild(tr);}
+  files.forEach(function(f){fetch(f+V,{cache:'no-store'}).then(function(r){row(f,r.ok,r.ok?'ada':'HTTP '+r.status+' (tidak ditemukan)');}).catch(function(){row(f,false,'gagal dimuat');});});
+  
+var cfg = document.createElement('script');
+cfg.src = 'assets/js/config.js' + V;
+
+cfg.onload = function() {
+  var c = window.SIMON_CONFIG || {};
+
+  // Hanya memeriksa format URL, bukan menghubungi API.
+  var apiValid = /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec\/?$/.test(
+    String(c.API_URL || '').trim()
+  );
+
+  var m = document.createElement('p');
+  m.innerHTML =
+    'API_URL: ' +
+    (apiValid
+      ? '<span class="badge ok">format terisi</span>'
+      : '<span class="badge bad">belum valid di config.js</span>') +
+    ' · MUSIC_SRC: <code></code> · VERSION: <code></code>';
+
+  m.querySelectorAll('code')[0].textContent = c.MUSIC_SRC || '(kosong)';
+  m.querySelectorAll('code')[1].textContent = c.VERSION || '-';
+
+  document.getElementById('ext').appendChild(m);
+
+  if (c.MUSIC_SRC) {
+    fetch(c.MUSIC_SRC, { method: 'HEAD', cache: 'no-store' })
+      .then(function(r) {
+        row(
+          c.MUSIC_SRC + ' (musik)',
+          r.ok,
+          r.ok ? 'ada' : 'HTTP ' + r.status + ' - periksa berkas musik'
+        );
+      })
+      .catch(function() {
+        row(c.MUSIC_SRC + ' (musik)', false, 'gagal diperiksa');
+      });
+  }
+};
+
+cfg.onerror = function() {
+  var m = document.createElement('p');
+  m.innerHTML = '<span class="badge bad">config.js gagal dimuat</span>';
+  document.getElementById('ext').appendChild(m);
+};
+
+document.head.appendChild(cfg);
+
+})();
+</script></body></html>

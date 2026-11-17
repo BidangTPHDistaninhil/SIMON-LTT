@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laporan Harian · SIMON-LTT INHIL</title>
+<link rel="stylesheet" href="assets/css/app.css?v=2.1">
+<script src="assets/js/config.js?v=2.1"></script>
+<script src="assets/js/simon-ui.js?v=2.1"></script>
+<script src="assets/js/simon-libs.js?v=2.1"></script>
+<script src="assets/js/simon-api.js?v=2.1"></script>
+<script src="assets/js/report-lib.js?v=2.1"></script>
+<script src="assets/js/shell.js?v=2.1"></script>
+</head>
+<body data-mode="app" data-page="harian" data-title="Laporan Harian" data-roles="">
+<div class="layout">
+<aside class="sidebar" id="sidebar"></aside>
+<div class="content">
+<header class="topbar" id="topbar"></header>
+<main>
+<div id="state"></div>
+<div class="card"><div class="filters">
+<div><label for="fTgl">Tanggal</label><input type="date" id="fTgl"></div>
+<div><label for="fKec">Kecamatan</label><select id="fKec"></select></div>
+<div><label for="fJenis">Jenis LTT</label><select id="fJenis"></select></div>
+<div class="fix"><button class="btn ghost" id="btnReset">Reset filter</button></div></div>
+<div class="toolbar" style="margin-top:12px"><span class="sub" id="ctx"></span><span class="sp"></span><span class="dl"><button class="btn sm" data-export="xlsx">⬇ Excel</button><button class="btn sm" data-export="pdf">⬇ PDF</button><button class="btn sm" data-export="csv">⬇ CSV</button></span></div></div>
+<div class="sec-h"><h2>Rekap Total LTT</h2><span class="tag" id="tagTotal"></span></div><div class="kpis" id="kTotal"></div>
+<div class="sec-h"><h2 id="hToday">LTT Hari Ini</h2></div><div class="kpis" id="kToday"></div>
+<div class="grid g2">
+<div class="card" id="belumCard"><h2><span class="bar"></span><span id="belumTitle">Kecamatan Belum Input Hari Ini</span> <span class="badge" id="belumBadge"></span></h2><div id="belumBody"></div></div>
+<div class="card"><h2><span class="bar"></span>Rekap Reguler, OPLAH, Jagung</h2><div class="grid g3" id="scores"></div></div></div>
+<div class="grid g2">
+<div class="card"><h2><span class="bar"></span>Grafik LTT per Kecamatan (Ha)</h2><div class="chart-box"><canvas id="chartKec"></canvas></div></div>
+<div class="card"><h2><span class="bar" style="background:#f59e0b"></span>Grafik Jagung per Kecamatan (Ha)</h2><div class="chart-box"><canvas id="chartJagung"></canvas></div></div></div>
+<div class="grid g2">
+<div class="card"><h2><span class="bar"></span>Top 10 Kecamatan (LTT)</h2><ol class="rank" id="rank"></ol></div>
+<div class="card"><h2><span class="bar" style="background:#f59e0b"></span>Top Kecamatan (Jagung)</h2><ol class="rank" id="rankJ"></ol></div></div>
+<div class="card"><h2><span class="bar"></span>Data LTT Per Hari <span class="badge" id="rowCount"></span></h2>
+<div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Kecamatan</th><th>Desa/Kelurahan</th><th>Kelompok Tani</th><th>Jenis LTT</th><th>Komoditas</th><th>Metode Tanam</th><th class="num">Luas (Ha)</th><th>Nama Pelapor</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="pager"><span id="pgInfo"></span><span class="pb" id="pgBtns"></span></div></div>
+<script>
+SimonShell.ready(function(me){
+  var R=SimonReport,U=SimonUI,data=[],ref=null,filtered=[],page=1,PS=25,isKec=me.role==='PETUGAS_KECAMATAN';
+  function fix(n){return Math.round(n*100)/100;}
+  function ha(n){return U.fmt(n,' Ha');}
+  function init(){
+    var kecs=isKec?[me.kecamatan]:ref.semuaKecamatan;
+    fKec.innerHTML=(isKec?'':U.opt('','Semua Kecamatan'))+kecs.map(function(k){return U.opt(k,k);}).join('');
+    if(isKec){fKec.value=me.kecamatan;fKec.disabled=true;document.getElementById('belumCard').style.display='none';ctx.textContent='Data kecamatan '+me.kecamatan;}
+    else ctx.textContent='Seluruh kecamatan · wilayah mengikuti hak akses Anda';
+    var js={};ref.jenisLtt.forEach(function(j){js[j.v]=1;});data.forEach(function(d){if(d.jenis)js[d.jenis]=1;});
+    fJenis.innerHTML=U.opt('','Semua Jenis')+Object.keys(js).sort().map(function(j){return U.opt(j,R.jenisLabel(j));}).join('');
+    [fTgl,fKec,fJenis].forEach(function(e){e.onchange=function(){page=1;render();};});
+    btnReset.onclick=function(){fTgl.value='';fJenis.value='';if(!isKec)fKec.value='';page=1;render();};
+  }
+  function kpiRow(el,total,by){
+    var h='<div class="kpi em"><div class="l">Total LTT</div><div class="v">'+U.fmt(total)+' <small>Ha</small></div></div>';
+    R.GROUPS.forEach(function(g){h+='<div class="kpi sm"><div class="l">'+U.esc(g.l)+'</div><div class="v">'+U.fmt(by[g.k]||0)+' <small>Ha</small></div></div>';});
+    el.innerHTML=h;
+  }
+  function render(){
+    var kec=fKec.value,jn=fJenis.value,tg=fTgl.value,active=tg||me.serverDate;
+    filtered=data.filter(function(d){if(kec&&d.kec!==kec)return false;if(jn&&d.jenis!==jn)return false;if(tg&&d.tgl!==tg)return false;return true;});
+    var total=0,tToday=0,by={},byT={},kecMap={},jMap={},sudah={};
+
+filtered.forEach(function(d){
+  total=fix(total+d.luas);
+  by[d.g]=fix((by[d.g]||0)+d.luas);
+
+  if(d.tgl===active){
+    tToday=fix(tToday+d.luas);
+    byT[d.g]=fix((byT[d.g]||0)+d.luas);
+  }
+
+  if(d.kec) kecMap[d.kec]=fix((kecMap[d.kec]||0)+d.luas);
+
+  if((d.g==='jagung'||d.g==='jagungpolri')&&d.kec){
+    jMap[d.kec]=fix((jMap[d.kec]||0)+d.luas);
+  }
+});
+
+// Status input kecamatan hanya mengikuti tanggal,
+// tidak terpengaruh filter jenis LTT maupun kecamatan.
+data.forEach(function(d){
+  if(d.tgl===active && d.kec){
+    sudah[d.kec]=1;
+  }
+});
+    tagTotal.textContent=tg?('Tanggal '+tg):'Semua tanggal';
+    hToday.textContent=active===me.serverDate?'LTT Hari Ini':'LTT pada '+active;
+    kpiRow(kTotal,total,by);kpiRow(kToday,tToday,byT);
+    scores.innerHTML=[['Reguler',by.reguler||0],['OPLAH',by.oplah||0],['Jagung (+Polri)',fix((by.jagung||0)+(by.jagungpolri||0))]].map(function(s){return '<div class="kpi sm"><div class="l">Rekap '+U.esc(s[0])+'</div><div class="v">'+U.fmt(s[1])+' <small>Ha</small></div></div>';}).join('');
+    if(!isKec){
+      var bl=ref.semuaKecamatan.filter(function(k){return !sudah[k];});
+      belumTitle.textContent=active===me.serverDate?'Kecamatan Belum Input Hari Ini':'Kecamatan Belum Input ('+active+')';
+      belumBadge.textContent=bl.length+' Kecamatan';belumBadge.className='badge '+(bl.length?'bad':'ok');
+      belumBody.innerHTML=bl.length?'<div class="chips">'+bl.map(function(k){return '<span class="chip warn">📍 '+U.esc(k)+'</span>';}).join('')+'</div>':'<div class="banner" style="background:var(--emerald-soft);color:var(--emerald-d);margin:0">✅ Semua kecamatan sudah input pada tanggal ini</div>';
+    }
+    function rk(el,map){var t=R.topN(map,10);el.innerHTML=t.length?t.map(function(r,i){return '<li><span class="n">'+(i+1)+'</span><span class="nm">'+U.esc(r[0])+'</span><span class="vl">'+U.fmt(r[1])+' Ha</span></li>';}).join(''):'<li class="empty">Belum ada data</li>';}
+    rk(document.getElementById('rank'),kecMap);rk(document.getElementById('rankJ'),jMap);
+    R.chart('chartKec',R.barCfg(Object.keys(kecMap),[{label:'LTT (Ha)',data:Object.keys(kecMap).map(function(k){return kecMap[k];}),color:'rgba(5,150,105,.8)'}])).catch(function(e){U.toast(U.errMsg(e),true);});
+    R.chart('chartJagung',R.barCfg(Object.keys(jMap),[{label:'Jagung (Ha)',data:Object.keys(jMap).map(function(k){return jMap[k];}),color:'rgba(245,158,11,.85)'}])).catch(function(){});
+    filtered.sort(function(a,b){return a.tgl<b.tgl?1:a.tgl>b.tgl?-1:0;});
+    renderTable();
+  }
+  function renderTable(){
+    var pages=Math.max(1,Math.ceil(filtered.length/PS));if(page>pages)page=pages;var s=(page-1)*PS;
+    rowCount.textContent=filtered.length+' data';
+    tb.innerHTML=filtered.length?filtered.slice(s,s+PS).map(function(d){return '<tr><td>'+U.esc(d.tgl||'-')+'</td><td><b>'+U.esc(d.kec||'-')+'</b></td><td>'+U.esc(d.desa||'-')+'</td><td>'+U.esc(d.poktan||'-')+'</td><td><span class="badge">'+U.esc(R.jenisLabel(d.jenis))+'</span></td><td>'+U.esc(d.komoditas||'-')+'</td><td>'+U.esc(d.metode||'-')+'</td><td class="num mono"><b>'+U.fmt(d.luas)+'</b></td><td>'+U.esc(d.pelapor||'-')+'</td></tr>';}).join(''):'<tr><td colspan="9" class="empty">Tidak ada data pada filter ini.</td></tr>';
+    pgInfo.textContent=filtered.length?'Menampilkan '+(s+1)+'–'+Math.min(s+PS,filtered.length)+' dari '+filtered.length:'';
+    var h='<button '+(page<=1?'disabled':'')+' data-p="'+(page-1)+'">‹</button><button class="on" disabled>'+page+' / '+pages+'</button><button '+(page>=pages?'disabled':'')+' data-p="'+(page+1)+'">›</button>';
+    pgBtns.innerHTML=h;
+  }
+  pgBtns.onclick=function(e){var p=e.target.getAttribute('data-p');if(p){page=+p;renderTable();}};
+  R.wireExport(function(){
+    var rows=filtered.slice().sort(function(a,b){return a.tgl<b.tgl?-1:a.tgl>b.tgl?1:0;}),tot=0;
+    var body=rows.map(function(d){tot+=d.luas;return [d.tgl,d.kec,d.desa,d.poktan,R.jenisLabel(d.jenis),d.komoditas,d.metode,d.luas,d.pelapor];});
+    var sub='Kabupaten Indragiri Hilir | '+(fTgl.value?'Tanggal '+fTgl.value:'Semua tanggal')+(fKec.value?' | '+fKec.value:'')+(fJenis.value?' | '+R.jenisLabel(fJenis.value):'');
+    return {title:'Laporan Luas Tambah Tanam (LTT)',subtitle:sub,head:['Tanggal','Kecamatan','Desa/Kelurahan','Kelompok Tani','Jenis LTT','Komoditas','Metode Tanam','Luas (Ha)','Nama Pelapor'],body:body,foot:['','','','','','','TOTAL',tot,''],numCols:[7],file:'Laporan_LTT_Inhil',sheet:'Data LTT'};
+  });
+  R.boot(async function(){var d=await R.load();data=d.rows;ref=d.ref;init();render();});
+});
+</script>
+</main>
+</div>
+</div>
+</body>
+</html>
