@@ -176,7 +176,15 @@ function welcome(p) {
   document.addEventListener('keydown', key);
 
   var go = o.querySelector('[data-go]');
-  if (go) go.focus({ preventScroll: true });
+
+if (go) {
+  go.addEventListener('click', function (e) {
+    e.stopPropagation();
+    close();
+    Music.play();
+  });
+
+  go.focus({ preventScroll: true });
 }
 
 
