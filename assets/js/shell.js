@@ -95,32 +95,85 @@
   })();
 
   // ---------- Layar pembuka (hanya sekali setelah login berhasil) ----------
-  function welcome(p) {
-    if (sessionStorage.getItem('simon.welcome') !== '1') return;
-    sessionStorage.removeItem('simon.welcome');
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var o = document.createElement('div');
-    o.className = 'welcome' + (reduce ? ' reduce' : ''); o.setAttribute('role', 'dialog'); o.setAttribute('aria-label', 'Selamat datang di SIMON-LTT INHIL');
-    o.innerHTML =
-      '<div class="w-bg"></div><div class="w-card">' +
-      '<div class="w-logo"><img src="' + window.SimonUI.LOGO + '" referrerpolicy="no-referrer" alt="Logo Kabupaten Indragiri Hilir"></div>' +
-      '<div class="w-mark">SIMON-LTT</div>' +
-      '<h2>SELAMAT DATANG DI SIMON-LTT INHIL</h2>' +
-      '<div class="w-line"></div>' +
-      '<p>Sistem Informasi Monitoring Luas Tambah Tanam Kabupaten Indragiri Hilir</p>' +
-      '<div class="w-user">' + esc(p.nama || p.username) + ' · ' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</div>' +
-      '<div class="w-acts"><button class="btn gold" data-go="1">Masuk ke Aplikasi</button><button class="btn ghost w-music" data-music="1" type="button"></button></div>' +
-      '<div class="w-bar"><i></i></div><small>Tekan di mana saja atau Esc untuk melewati</small></div>';
-    document.body.appendChild(o);
-    var mb = o.querySelector('[data-music]'); Music.bind(mb);
-    var closed = false, timer;
-    function key(e) { if (e.key === 'Escape' || e.key === 'Enter') close(); }
-    function close() { if (closed) return; closed = true; clearTimeout(timer); document.removeEventListener('keydown', key); o.classList.add('out'); setTimeout(function () { o.remove(); }, 450); }
-    o.addEventListener('click', function (e) { if (e.target.closest('[data-music]')) return; close(); });
-    document.addEventListener('keydown', key);
-    timer = setTimeout(close, reduce ? 1800 : 4200);
-    var go = o.querySelector('[data-go]'); if (go) go.focus({ preventScroll: true });
+
+function welcome(p) {
+  if (sessionStorage.getItem('simon.welcome') !== '1') return;
+  sessionStorage.removeItem('simon.welcome');
+
+  var reduce = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var o = document.createElement('div');
+  o.className = 'welcome' + (reduce ? ' reduce' : '');
+  o.setAttribute('role', 'dialog');
+  o.setAttribute('aria-label', 'Selamat datang di SIMON-LTT INHIL');
+
+  o.innerHTML =
+    '<div class="w-bg"></div><div class="w-card">' +
+    '<div class="w-logo"><img src="' + window.SimonUI.LOGO + '" referrerpolicy="no-referrer" alt="Logo Kabupaten Indragiri Hilir"></div>' +
+    '<div class="w-mark">SIMON-LTT</div>' +
+    '<h2>SELAMAT DATANG DI SIMON-LTT INHIL</h2>' +
+    '<div class="w-line"></div>' +
+    '<p>Sistem Informasi Monitoring Luas Tambah Tanam Kabupaten Indragiri Hilir</p>' +
+    '<div class="w-user">' + esc(p.nama || p.username) + ' · ' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</div>' +
+    '<div class="w-acts"><button class="btn gold" data-go="1">Masuk ke Aplikasi</button><button class="btn ghost w-music" data-music="1" type="button"></button></div>' +
+    '<div class="w-bar"><i></i></div><small>Ketuk di mana saja untuk mendengarkan sambutan · Esc untuk melewati</small></div>';
+
+  document.body.appendChild(o);
+
+  var mb = o.querySelector('[data-music]');
+  Music.bind(mb);
+
+  var audio = new Audio('Welcome.mp3');
+  audio.loop = false;
+  audio.preload = 'auto';
+
+  var started = false;
+  var closed = false;
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    audio.pause();
+    audio.currentTime = 0;
+    document.removeEventListener('keydown', key);
+    o.classList.add('out');
+    setTimeout(function () { o.remove(); }, 450);
   }
+
+  function startWelcome() {
+    if (started || closed) return;
+    started = true;
+
+    audio.play().then(function () {
+      // Suara sambutan sedang diputar
+    }).catch(function () {
+      close();
+    });
+  }
+
+  function key(e) {
+    if (e.key === 'Escape') {
+      close();
+    } else if (e.key === 'Enter') {
+      startWelcome();
+    }
+  }
+
+  o.addEventListener('click', function (e) {
+    if (e.target.closest('[data-music]')) return;
+    startWelcome();
+  });
+
+  audio.addEventListener('ended', close);
+  audio.addEventListener('error', close);
+
+  document.addEventListener('keydown', key);
+
+  var go = o.querySelector('[data-go]');
+  if (go) go.focus({ preventScroll: true });
+}
+
 
   // ---------- Kerangka ----------
   function mountApp(p, page, title) {
