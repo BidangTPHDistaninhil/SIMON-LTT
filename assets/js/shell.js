@@ -175,13 +175,29 @@ function welcome(p) {
   if (go) {
     go.type = 'button';
 
-    go.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+   go.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopImmediatePropagation();
 
+  if (started) {
+    // Jika sambutan sudah diputar, langsung masuk aplikasi
+    close();
+    Music.play();
+    return;
+  }
+
+  // Jika belum diputar, putar sambutan terlebih dahulu
+  started = true;
+  audio.play().then(function () {
+    audio.addEventListener('ended', function () {
       close();
       Music.play();
-    });
+    }, { once: true });
+  }).catch(function () {
+    close();
+    Music.play();
+  });
+});
 
     go.focus({ preventScroll: true });
   }
