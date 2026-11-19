@@ -186,7 +186,8 @@ if (go) {
 
   go.focus({ preventScroll: true });
 }
-
+  
+}
 
   // ---------- Kerangka ----------
   function mountApp(p, page, title) {
