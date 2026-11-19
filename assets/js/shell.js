@@ -157,38 +157,41 @@ function welcome(p) {
     });
   }
 
-  function key(e) {
+      function key(e) {
     if (e.key === 'Escape') {
       close();
     } else if (e.key === 'Enter') {
+      e.preventDefault();
       startWelcome();
     }
   }
-
-  o.addEventListener('click', function (e) {
-    if (e.target.closest('[data-music]')) return;
-    startWelcome();
-  });
-
-  audio.addEventListener('ended', close);
+     audio.addEventListener('ended', close);
   audio.addEventListener('error', close);
 
   document.addEventListener('keydown', key);
-
+  
   var go = o.querySelector('[data-go]');
 
-if (go) {
-  go.addEventListener('click', function (e) {
-    e.stopPropagation();
-    close();
-    Music.play();
+  if (go) {
+    go.type = 'button';
+
+    go.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      close();
+      Music.play();
+    });
+
+    go.focus({ preventScroll: true });
+  }
+
+  o.addEventListener('click', function (e) {
+    if (e.target.closest('[data-go]') || e.target.closest('[data-music]')) return;
+    startWelcome();
   });
 
-  go.focus({ preventScroll: true });
 }
-  
-}
-
   // ---------- Kerangka ----------
   function mountApp(p, page, title) {
     var sb = document.getElementById('sidebar'), tb = document.getElementById('topbar');
