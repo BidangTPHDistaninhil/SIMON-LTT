@@ -91,7 +91,12 @@
       var want = st.on === true || (st.on === undefined && cfg().MUSIC_AUTOSTART === true);
       if (want && cfg().MUSIC_SRC) play();
     }
-    return { bind: bind, init: init, toggle: toggle };
+    return {
+  bind: bind,
+  init: init,
+  toggle: toggle,
+  play: play
+};
   })();
 
   // ---------- Layar pembuka (hanya sekali setelah login berhasil) ----------
