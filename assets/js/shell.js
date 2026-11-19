@@ -136,15 +136,19 @@ function welcome(p) {
   var started = false;
   var closed = false;
 
-  function close() {
-    if (closed) return;
-    closed = true;
+  function close(stopAudio) {
+  if (closed) return;
+  closed = true;
+
+  if (stopAudio !== false) {
     audio.pause();
     audio.currentTime = 0;
-    document.removeEventListener('keydown', key);
-    o.classList.add('out');
-    setTimeout(function () { o.remove(); }, 450);
   }
+
+  document.removeEventListener('keydown', key);
+  o.classList.add('out');
+  setTimeout(function () { o.remove(); }, 450);
+}
 
   function startWelcome() {
     if (started || closed) return;
@@ -179,24 +183,23 @@ function welcome(p) {
   e.preventDefault();
   e.stopImmediatePropagation();
 
-  if (started) {
-    // Jika sambutan sudah diputar, langsung masuk aplikasi
-    close();
-    Music.play();
-    return;
-  }
+  if (!started) {
+    started = true;
 
-  // Jika belum diputar, putar sambutan terlebih dahulu
-  started = true;
-  audio.play().then(function () {
+    audio.play().then(function () {
+      audio.addEventListener('ended', function () {
+        Music.play();
+      }, { once: true });
+    }).catch(function () {
+      Music.play();
+    });
+  } else {
     audio.addEventListener('ended', function () {
-      close();
       Music.play();
     }, { once: true });
-  }).catch(function () {
-    close();
-    Music.play();
-  });
+  }
+
+  close(false);
 });
 
     go.focus({ preventScroll: true });
