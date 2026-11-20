@@ -319,7 +319,7 @@ function welcome(p) {
 
         audio.play().catch(function () {
           close();
-          Music.play();
+          Music.play ();
         });
       }
 
