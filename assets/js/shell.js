@@ -224,6 +224,7 @@
   // ---------- Layar pembuka (hanya sekali setelah login berhasil) ----------
 
 
+
 function welcome(p) {
   if (sessionStorage.getItem('simon.welcome') !== '1') return;
   sessionStorage.removeItem('simon.welcome');
@@ -244,13 +245,10 @@ function welcome(p) {
     '<div class="w-line"></div>' +
     '<p>Sistem Informasi Monitoring Luas Tambah Tanam Kabupaten Indragiri Hilir</p>' +
     '<div class="w-user">' + esc(p.nama || p.username) + ' · ' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</div>' +
-    '<div class="w-acts"><button class="btn gold" data-go="1">Masuk ke Aplikasi</button><button class="btn ghost w-music" data-music="1" type="button"></button></div>' +
+    '<div class="w-acts"><button class="btn gold" data-go="1" type="button">Masuk ke Aplikasi</button></div>' +
     '<div class="w-bar"><i></i></div><small>Ketuk di mana saja untuk mendengarkan sambutan · Esc untuk melewati</small></div>';
 
   document.body.appendChild(o);
-
-  var mb = o.querySelector('[data-music]');
-  Music.bind(mb);
 
   var audio = new Audio('assets/musik/Welcome.mp3');
   audio.loop = false;
@@ -270,11 +268,15 @@ function welcome(p) {
 
     document.removeEventListener('keydown', key);
     o.classList.add('out');
-    setTimeout(function () { o.remove(); }, 450);
+
+    setTimeout(function () {
+      o.remove();
+    }, 450);
   }
 
   function startWelcome() {
     if (started || closed) return;
+
     started = true;
 
     audio.play().catch(function () {
@@ -293,11 +295,13 @@ function welcome(p) {
     }
   }
 
+  // Musik halaman hanya dimulai setelah suara Welcome selesai.
   audio.addEventListener('ended', function () {
     close(false);
     Music.play();
   });
 
+  // Jika file Welcome gagal diputar, lanjutkan ke musik halaman.
   audio.addEventListener('error', function () {
     close();
     Music.play();
@@ -308,31 +312,19 @@ function welcome(p) {
   var go = o.querySelector('[data-go]');
 
   if (go) {
-    go.type = 'button';
+    go.focus({ preventScroll: true });
 
     go.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      if (!started) {
-        started = true;
-
-        audio.play().catch(function () {
-          close();
-          Music.play ();
-        });
-      }
-
-      close(false);
+      // Jangan tutup layar selama suara Welcome masih berjalan.
+      startWelcome();
     });
-
-    go.focus({ preventScroll: true });
   }
 
   o.addEventListener('click', function (e) {
-    if (e.target.closest('[data-go]') ||
-        e.target.closest('[data-music]')) return;
-
+    if (e.target.closest('[data-go]')) return;
     startWelcome();
   });
 }
