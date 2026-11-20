@@ -50,12 +50,12 @@
     var armed = false, st = read(), src = '';
 
     var TRACKS = {
-  dashboard: 'assets/musik/gonachange.mp3',
-  tampilltt: 'assets/musik/Sentimental.mp3',
-  harian: 'assets/musik/foreverinlove.mp3',
-  bulanan: 'assets/musik/perfect.mp3',
-  capaian: 'assets/musik/imalive.mp3',
-  analisis: 'assets/musik/themoment.mp3'
+  dashboard: 'assets/music/gonachange.mp3',
+  tampilltt: 'assets/music/Sentimental.mp3',
+  harian: 'assets/music/foreverinlove.mp3',
+  bulanan: 'assets/music/perfect.mp3',
+  capaian: 'assets/music/imalive.mp3',
+  analisis: 'assets/music/themoment.mp3'
 };
 
     function read() {
@@ -245,7 +245,7 @@ function welcome(p) {
     '<div class="w-line"></div>' +
     '<p>Sistem Informasi Monitoring Luas Tambah Tanam Kabupaten Indragiri Hilir</p>' +
     '<div class="w-user">' + esc(p.nama || p.username) + ' · ' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</div>' +
-    '<div class="w-acts"><button class="btn gold" data-go="1" type="button">Dengarkan Sambutan</button></div>' +
+    '<div class="w-acts"><button class="btn gold" data-go="1" type="button">Sistem Akan Segera Masuk</button></div>' +
     '<div class="w-bar"><i></i></div><small>Ketuk di mana saja untuk mendengarkan sambutan · Esc untuk melewati</small></div>';
 
   document.body.appendChild(o);
