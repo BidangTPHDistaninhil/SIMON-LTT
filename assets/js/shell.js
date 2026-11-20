@@ -250,7 +250,7 @@ function welcome(p) {
 
   document.body.appendChild(o);
   
-  var audio = new Audio('assets/musik/Welcome.mp3');
+  var audio = new Audio('assets/music/Welcome.mp3');
   audio.loop = false;
   audio.preload = 'auto';
 
