@@ -50,13 +50,13 @@
     var armed = false, st = read(), src = '';
 
     var TRACKS = {
-      dashboard: 'assets/music/gonachange.mp3',
-      tampilltt: 'assets/music/Sentimental.mp3',
-      harian: 'assets/music/foreverinlove.mp3',
-      bulanan: 'assets/music/perfect.mp3',
-      capaian: 'assets/music/imalive.mp3',
-      analisis: 'assets/music/themoment.mp3'
-    };
+  dashboard: 'assets/musik/gonachange.mp3',
+  tampilltt: 'assets/musik/Sentimental.mp3',
+  harian: 'assets/musik/foreverinlove.mp3',
+  bulanan: 'assets/musik/perfect.mp3',
+  capaian: 'assets/musik/imalive.mp3',
+  analisis: 'assets/musik/themoment.mp3'
+};
 
     function read() {
       try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; }
