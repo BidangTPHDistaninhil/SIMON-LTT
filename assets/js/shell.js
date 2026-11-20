@@ -245,11 +245,11 @@ function welcome(p) {
     '<div class="w-line"></div>' +
     '<p>Sistem Informasi Monitoring Luas Tambah Tanam Kabupaten Indragiri Hilir</p>' +
     '<div class="w-user">' + esc(p.nama || p.username) + ' · ' + esc(ROLE_LABEL[p.role] || p.role) + (p.kecamatan ? ' · ' + esc(p.kecamatan) : '') + '</div>' +
-    '<div class="w-acts"><button class="btn gold" data-go="1" type="button">Masuk ke Aplikasi</button></div>' +
+    '<div class="w-acts"><button class="btn gold" data-go="1" type="button">Dengarkan Sambutan</button></div>' +
     '<div class="w-bar"><i></i></div><small>Ketuk di mana saja untuk mendengarkan sambutan · Esc untuk melewati</small></div>';
 
   document.body.appendChild(o);
-
+  
   var audio = new Audio('assets/musik/Welcome.mp3');
   audio.loop = false;
   audio.preload = 'auto';
@@ -275,15 +275,17 @@ function welcome(p) {
   }
 
   function startWelcome() {
-    if (started || closed) return;
+  if (started || closed) return;
 
-    started = true;
+  started = true;
 
-    audio.play().catch(function () {
-      close();
-      Music.play();
-    });
-  }
+  audio.play().catch(function () {
+    // Autoplay diblokir browser.
+    // Biarkan layar Welcome tetap tampil.
+    // Pengguna bisa klik tombol untuk mencoba lagi.
+    started = false;
+  });
+}
 
   function key(e) {
     if (e.key === 'Escape') {
@@ -327,6 +329,7 @@ function welcome(p) {
     if (e.target.closest('[data-go]')) return;
     startWelcome();
   });
+  startWelcome();
 }
 
   // ---------- Kerangka ----------
