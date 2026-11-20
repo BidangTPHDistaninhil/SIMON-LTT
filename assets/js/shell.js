@@ -42,64 +42,187 @@
   function cfg() { return window.SIMON_CONFIG || {}; }
 
   // ---------- Musik latar: satu pemutar bersama, status dibawa antar halaman (sessionStorage) ----------
+  
+  // ---------- Musik background per halaman ----------
   var Music = (function () {
-    var KEY = 'simon.music', a = null, state = 'off', btns = [], bc = null, armed = false, st = read(), lastSave = 0;
-    function read() { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
-    function write() { try { sessionStorage.setItem(KEY, JSON.stringify({ on: !!st.on, t: st.t || 0 })); } catch (e) { /* abaikan */ } }
-    function label() {
-      return { on: 'Musik menyala (klik untuk mematikan)', off: 'Putar musik latar', blocked: 'Musik tertahan oleh browser. Ketuk untuk melanjutkan',
-        missing: 'Berkas musik tidak ditemukan: ' + (cfg().MUSIC_SRC || '(MUSIC_SRC kosong)') + '. Unggah berkas itu ke folder yang sama dengan halaman.' }[state];
+    var KEY = 'simon.music';
+    var a = null, state = 'off', btns = [], bc = null;
+    var armed = false, st = read(), src = '';
+
+    var TRACKS = {
+      dashboard: 'assets/music/gonachange.mp3',
+      tampilltt: 'assets/music/Sentimental.mp3',
+      harian: 'assets/music/foreverinlove.mp3',
+      bulanan: 'assets/music/perfect.mp3',
+      capaian: 'assets/music/imalive.mp3',
+      analisis: 'assets/music/themoment.mp3'
+    };
+
+    function read() {
+      try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; }
+      catch (e) { return {}; }
     }
+
+    function write() {
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify({
+          muted: !!st.muted
+        }));
+      } catch (e) {}
+    }
+
+    function label() {
+      if (state === 'on') return 'Musik menyala (klik untuk mute)';
+      if (state === 'blocked') return 'Browser menahan musik. Klik untuk memutar';
+      if (state === 'missing') return 'Berkas musik tidak ditemukan: ' + src;
+      if (st.muted) return 'Musik dimatikan (klik untuk mengaktifkan)';
+      return 'Putar musik';
+    }
+
     function ui() {
       btns.forEach(function (b) {
-        b.dataset.state = state; b.setAttribute('aria-pressed', state === 'on' ? 'true' : 'false'); b.title = label(); b.setAttribute('aria-label', label());
-        b.textContent = state === 'on' ? '🔊' : state === 'missing' ? '🔇' : '🔈';
+        b.dataset.state = state;
+        b.setAttribute('aria-pressed', state === 'on' ? 'true' : 'false');
+        b.title = label();
+        b.setAttribute('aria-label', label());
+
+        b.textContent = st.muted ? '🔇' :
+          state === 'on' ? '🔊' : '🔈';
+
         b.classList.toggle('pulse', state === 'blocked');
       });
     }
+
     function ensure() {
       if (a) return a;
-      a = new Audio(); a.loop = true; a.preload = 'none'; a.src = cfg().MUSIC_SRC;
-      a.addEventListener('error', function () { state = 'missing'; st.on = false; write(); ui(); });
-      a.addEventListener('loadedmetadata', function () { try { if (st.t) a.currentTime = st.t; } catch (e) { /* abaikan */ } }, { once: true });
-      a.addEventListener('timeupdate', function () { var n = Date.now(); if (n - lastSave > 2000) { lastSave = n; st.t = a.currentTime; write(); } });
+
+      a = new Audio();
+      a.loop = true;
+      a.preload = 'auto';
+      a.src = src;
+
+      a.addEventListener('error', function () {
+        state = 'missing';
+        ui();
+      });
+
       return a;
     }
+
     function armResume() {
-      if (armed) return; armed = true;
-      var go = function () { armed = false; document.removeEventListener('pointerdown', go, true); document.removeEventListener('keydown', go, true); if (state === 'blocked') play(); };
-      document.addEventListener('pointerdown', go, true); document.addEventListener('keydown', go, true);
+      if (armed) return;
+      armed = true;
+
+      var go = function () {
+        armed = false;
+        document.removeEventListener('pointerdown', go, true);
+        document.removeEventListener('keydown', go, true);
+
+        if (state === 'blocked' && !st.muted) play();
+      };
+
+      document.addEventListener('pointerdown', go, true);
+      document.addEventListener('keydown', go, true);
     }
+
     async function play() {
-      if (!cfg().MUSIC_SRC) { state = 'missing'; ui(); return; }
+      if (!src || st.muted) {
+        state = 'off';
+        ui();
+        return;
+      }
+
       ensure();
+
       try {
-        await a.play(); state = 'on'; st.on = true; write();
+        await a.play();
+        state = 'on';
+
         if (bc) bc.postMessage('playing');
       } catch (e) {
         if (a.error) state = 'missing';
-        else { state = 'blocked'; armResume(); }
+        else {
+          state = 'blocked';
+          armResume();
+        }
       }
+
       ui();
     }
-    function pause() { if (a) { st.t = a.currentTime || st.t; a.pause(); } state = 'off'; st.on = false; write(); ui(); }
-    function toggle() { if (state === 'on') pause(); else if (state === 'missing') { state = 'off'; a = null; play(); } else play(); }
-    function bind(b) { btns.push(b); b.addEventListener('click', function (e) { e.stopPropagation(); toggle(); }); ui(); }
-    function init() {
-      try { bc = new BroadcastChannel('simon-music'); bc.onmessage = function () { if (a && !a.paused) { a.pause(); state = 'off'; st.on = false; write(); ui(); } }; } catch (e) { bc = null; }
-      window.addEventListener('pagehide', function () { if (a) { st.t = a.currentTime || st.t; write(); a.pause(); } });
-      var want = st.on === true || (st.on === undefined && cfg().MUSIC_AUTOSTART === true);
-      if (want && cfg().MUSIC_SRC) play();
+
+    function pause() {
+      if (a) a.pause();
+      state = 'off';
+      ui();
     }
+
+    function toggle() {
+  if (state === 'on') {
+    st.muted = true;
+    pause();
+  } else {
+    st.muted = false;
+    write();
+
+    if (a && a.error) a = null;
+    play();
+  }
+
+  write();
+  ui();
+}
+
+    function bind(b) {
+      btns.push(b);
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggle();
+      });
+      ui();
+    }
+
+    function init(page, defer) {
+      src = TRACKS[page] || '';
+
+      try {
+        bc = new BroadcastChannel('simon-music');
+
+        bc.onmessage = function () {
+          if (a && !a.paused) {
+            a.pause();
+            state = 'off';
+            ui();
+          }
+        };
+      } catch (e) {
+        bc = null;
+      }
+
+      window.addEventListener('pagehide', function () {
+        if (a) a.pause();
+      });
+
+      if (!src) {
+        pause();
+        return;
+      }
+
+      if (!st.muted && !defer) play();
+      else ui();
+    }
+
     return {
-  bind: bind,
-  init: init,
-  toggle: toggle,
-  play: play
-};
+      bind: bind,
+      init: init,
+      toggle: toggle,
+      play: play,
+      pause: pause
+    };
   })();
 
+
   // ---------- Layar pembuka (hanya sekali setelah login berhasil) ----------
+
 
 function welcome(p) {
   if (sessionStorage.getItem('simon.welcome') !== '1') return;
@@ -129,7 +252,7 @@ function welcome(p) {
   var mb = o.querySelector('[data-music]');
   Music.bind(mb);
 
-  var audio = new Audio('Welcome.mp3');
+  var audio = new Audio('assets/musik/Welcome.mp3');
   audio.loop = false;
   audio.preload = 'auto';
 
@@ -137,80 +260,83 @@ function welcome(p) {
   var closed = false;
 
   function close(stopAudio) {
-  if (closed) return;
-  closed = true;
+    if (closed) return;
+    closed = true;
 
-  if (stopAudio !== false) {
-    audio.pause();
-    audio.currentTime = 0;
+    if (stopAudio !== false) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+
+    document.removeEventListener('keydown', key);
+    o.classList.add('out');
+    setTimeout(function () { o.remove(); }, 450);
   }
-
-  document.removeEventListener('keydown', key);
-  o.classList.add('out');
-  setTimeout(function () { o.remove(); }, 450);
-}
 
   function startWelcome() {
     if (started || closed) return;
     started = true;
 
-    audio.play().then(function () {
-      // Suara sambutan sedang diputar
-    }).catch(function () {
+    audio.play().catch(function () {
       close();
+      Music.play();
     });
   }
 
-      function key(e) {
+  function key(e) {
     if (e.key === 'Escape') {
       close();
+      Music.play();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       startWelcome();
     }
   }
-     audio.addEventListener('ended', close);
-  audio.addEventListener('error', close);
+
+  audio.addEventListener('ended', function () {
+    close(false);
+    Music.play();
+  });
+
+  audio.addEventListener('error', function () {
+    close();
+    Music.play();
+  });
 
   document.addEventListener('keydown', key);
-  
+
   var go = o.querySelector('[data-go]');
 
   if (go) {
     go.type = 'button';
 
-   go.addEventListener('click', function (e) {
-  e.preventDefault();
-  e.stopImmediatePropagation();
+    go.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
 
-  if (!started) {
-    started = true;
+      if (!started) {
+        started = true;
 
-    audio.play().then(function () {
-      audio.addEventListener('ended', function () {
-        Music.play();
-      }, { once: true });
-    }).catch(function () {
-      Music.play();
+        audio.play().catch(function () {
+          close();
+          Music.play();
+        });
+      }
+
+      close(false);
     });
-  } else {
-    audio.addEventListener('ended', function () {
-      Music.play();
-    }, { once: true });
-  }
-
-  close(false);
-});
 
     go.focus({ preventScroll: true });
   }
 
   o.addEventListener('click', function (e) {
-    if (e.target.closest('[data-go]') || e.target.closest('[data-music]')) return;
+    if (e.target.closest('[data-go]') ||
+        e.target.closest('[data-music]')) return;
+
     startWelcome();
   });
-
 }
+
   // ---------- Kerangka ----------
   function mountApp(p, page, title) {
     var sb = document.getElementById('sidebar'), tb = document.getElementById('topbar');
@@ -267,8 +393,11 @@ if (m) m.onclick = function (e) {
     if (p.mustChange && page !== 'pengaturan') { location.replace('pengaturan.html?ganti=1'); return; }
     me = p; window.SIMON_ME = p;
     mountApp(p, page, b.dataset.title);
-    Music.init();
-    welcome(p);
+
+var showWelcome = sessionStorage.getItem('simon.welcome') === '1';
+
+Music.init(page, showWelcome);
+welcome(p);
     waiters.splice(0).forEach(function (f) { f(p); });
   });
 
