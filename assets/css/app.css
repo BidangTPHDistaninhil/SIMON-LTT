@@ -26,6 +26,35 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sidebar .me b{display:block;color:#fff}
 .sidebar .me span{color:#9fd5bd}
 .content{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ===== BACKGROUND VIDEO AREA KONTEN SIMON-LTT ===== */
+.content{
+  position:relative;
+  isolation:isolate;
+  background:#f4f7f5;
+}
+
+.content-bg{
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  overflow:hidden;
+  pointer-events:none;
+}
+
+.content-bg video{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.content-bg-wash{
+  position:absolute;
+  inset:0;
+  background:rgba(244,247,245,.72);
+}
 .topbar{display:flex;align-items:center;gap:12px;padding:14px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
 .topbar h1{font-size:18px;font-weight:800;color:var(--forest)}
 .topbar .sub{color:var(--muted);font-size:12px}
