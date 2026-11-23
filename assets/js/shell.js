@@ -332,6 +332,41 @@ function welcome(p) {
   startWelcome();
 }
 
+
+function mountContentBackground(page) {
+  // Halaman yang menggunakan background video
+  var pages = [
+    'input',
+    'data',
+    'tampilltt',
+    'harian',
+    'bulanan',
+    'capaian',
+    'analisis',
+    'pengguna',
+    'log',
+    'pengaturan'
+  ];
+
+  if (pages.indexOf(page) === -1) return;
+
+  var content = document.querySelector('.content');
+  if (!content || content.querySelector('.content-bg')) return;
+
+  var bg = document.createElement('div');
+  bg.className = 'content-bg';
+  bg.setAttribute('aria-hidden', 'true');
+
+  bg.innerHTML =
+    '<video autoplay muted loop playsinline preload="metadata">' +
+      '<source src="https://videos.pexels.com/video-files/6701387/6701387-hd_1920_1080_30fps.mp4" type="video/mp4">' +
+    '</video>' +
+    '<div class="content-bg-wash"></div>';
+
+  content.prepend(bg);
+}
+
+
   // ---------- Kerangka ----------
   function mountApp(p, page, title) {
     var sb = document.getElementById('sidebar'), tb = document.getElementById('topbar');
@@ -362,7 +397,10 @@ if (m) m.onclick = function (e) {
 };
 
     var sc = document.querySelector('.content'); if (sc) sc.addEventListener('click', function () { document.body.classList.remove('nav-open'); });
-    var mb = document.getElementById('musicBtn'); if (mb) Music.bind(mb);
+    var mb = document.getElementById('musicBtn');
+if (mb) Music.bind(mb);
+
+mountContentBackground(page);
   }
 
   function fatal(missing) {
